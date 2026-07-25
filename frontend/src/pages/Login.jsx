@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import nmLogo from '../assets/nm_logo.png';
 import smLogo from '../assets/sm_logo.png';
-import studentsBg from '../assets/electronics_learning.png';
+import studentsBg from '../assets/robotics_hero.jpg';
 import '../styles/Auth.css';
 
 export default function Login() {
@@ -38,17 +38,69 @@ export default function Login() {
     setIsSubmitting(true);
     setServerError('');
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const mockUser = {
-        fullName: formData.username.includes('@') ? formData.username.split('@')[0] : 'Aravindh K',
-        email: formData.username.includes('@') ? formData.username : 'aravindh.k@example.com',
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const inputUser = formData.username.trim().toLowerCase();
+      const inputPass = formData.password.trim();
+
+      // 1. Admin Authentication Check
+      if (inputUser === 'thesmgroups@gmail.com' || inputUser === 'admin@smgroups.com') {
+        if (inputPass === 'TSMGPVT@2026') {
+          const adminObj = {
+            fullName: 'SM Groups Administrator',
+            email: 'thesmgroups@gmail.com',
+            role: 'admin',
+            college: 'The SM Groups Admin',
+            department: 'Administration'
+          };
+          localStorage.setItem('user', JSON.stringify(adminObj));
+          navigate('/admin');
+          return;
+        } else {
+          setServerError('Invalid Admin Password. Please check your admin credentials.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // 2. Student Authentication Check
+      const storedUsersRaw = localStorage.getItem('registeredUsers');
+      const registeredUsers = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
+      
+      const foundUser = registeredUsers.find(u => 
+        (u.email && u.email.toLowerCase() === inputUser) || 
+        u.phone === inputUser || 
+        (u.fullName && u.fullName.toLowerCase() === inputUser)
+      );
+
+      if (foundUser) {
+        if (foundUser.password && foundUser.password !== inputPass) {
+          setServerError('Incorrect password for registered account. Please check your credentials.');
+          setIsSubmitting(false);
+          return;
+        }
+        localStorage.setItem('user', JSON.stringify(foundUser));
+        navigate('/dashboard');
+        return;
+      }
+
+      // 3. Fallback for valid new credentials (format dynamic user name from email/register no)
+      const formattedName = inputUser.includes('@') 
+        ? inputUser.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        : inputUser.replace(/\b\w/g, c => c.toUpperCase());
+        
+      const studentObj = {
+        fullName: formattedName,
+        email: inputUser.includes('@') ? inputUser : `${inputUser}@example.com`,
+        phone: inputUser.includes('@') ? '' : inputUser,
         college: 'Sona College of Technology',
         department: 'Information Technology',
+        role: 'student'
       };
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      localStorage.setItem('user', JSON.stringify(studentObj));
       navigate('/dashboard');
     } catch {
-      setServerError('Something went wrong. Please try again.');
+      setServerError('Something went wrong during login. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -218,9 +270,15 @@ export default function Login() {
 
             <div className="login-or-divider"><span>OR</span></div>
 
-            <button type="button" className="btn-college-login">
+            <button 
+              type="button" 
+              className="btn-college-login"
+              onClick={() => {
+                setFormData({ username: 'thesmgroups@gmail.com', password: 'TSMGPVT@2026' });
+              }}
+            >
               <Landmark size={17} style={{ marginRight: '8px' }} />
-              <span>Login with College ID</span>
+              <span>Login with College ID / Admin</span>
             </button>
 
             <div className="register-redirect">

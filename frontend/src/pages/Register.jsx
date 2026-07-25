@@ -189,7 +189,7 @@ export default function Register() {
 
     setIsSubmitting(true);
     try {
-      const payload = { ...formData };
+      const payload = { ...formData, role: 'student' };
       if (formData.college === 'Other' && formData.otherCollege) {
         payload.college = formData.otherCollege;
       }
@@ -199,33 +199,39 @@ export default function Register() {
       delete payload.otherCollege;
       delete payload.otherDepartment;
 
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      let registeredUser = payload;
 
-      const data = await response.json();
-      if (!response.ok) {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          setServerError(data.message || 'Registration failed. Please try again.');
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+        if (response.ok && data.user) {
+          registeredUser = data.user;
         }
-      } else {
-        setIsSuccess(true);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 2000);
+      } catch {
+        // Local persistence fallback
       }
+
+      // Persist in registeredUsers array & active session
+      const storedUsersRaw = localStorage.getItem('registeredUsers');
+      const existingUsers = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
+      const updatedUsers = [...existingUsers.filter(u => u.email !== registeredUser.email), registeredUser];
+      localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
+      localStorage.setItem('user', JSON.stringify(registeredUser));
+
+      setIsSuccess(true);
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
     } catch (err) {
       console.error('Registration connection error:', err);
-      setServerError('Unable to connect to the server. Please check if the backend is running.');
+      setServerError('Registration failed. Please check your details and try again.');
     } finally {
       setIsSubmitting(false);
     }

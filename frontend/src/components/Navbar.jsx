@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import nmLogo from '../assets/nm_logo.png';
+import smLogo from '../assets/sm_logo.png';
 import '../styles/Navbar.css';
 
 export default function Navbar() {
@@ -35,14 +37,19 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="navbar-container">
-        <Link to="/" className="navbar-brand">
+        <Link to="/" className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img
-            src="/logo.png"
+            src={nmLogo}
+            alt="Naan Mudhalvan Logo"
+            className="navbar-logo"
+            style={{ height: '55px', width: 'auto' }}
+          />
+          <span style={{ height: '30px', width: '1px', background: 'rgba(0,0,0,0.15)' }}></span>
+          <img
+            src={smLogo}
             alt="The SM Groups Logo"
             className="navbar-logo"
-            width="52"
-            height="52"
-            loading="eager"
+            style={{ height: '38px', width: 'auto' }}
           />
         </Link>
 
