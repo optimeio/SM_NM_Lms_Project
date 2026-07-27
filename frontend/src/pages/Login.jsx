@@ -134,39 +134,6 @@ export default function Login() {
           Empowering Students.<br />Building a Better Tomorrow.
         </p>
 
-        {/* Feature Cards Row */}
-        <div className="hero-badges-row">
-          <div className="hero-badge-item">
-            <div className="hbi-icon-wrapper">
-              <Code2 size={22} />
-            </div>
-            <div className="hbi-text-container">
-              <span className="hbi-title">💻 Code.</span>
-              <span className="hbi-sub">Learn</span>
-            </div>
-          </div>
-          
-          <div className="hero-badge-item">
-            <div className="hbi-icon-wrapper">
-              <Lightbulb size={22} />
-            </div>
-            <div className="hbi-text-container">
-              <span className="hbi-title">💡 Think.</span>
-              <span className="hbi-sub">Innovate</span>
-            </div>
-          </div>
-
-          <div className="hero-badge-item">
-            <div className="hbi-icon-wrapper">
-              <BarChart2 size={22} />
-            </div>
-            <div className="hbi-text-container">
-              <span className="hbi-title">📈 Build.</span>
-              <span className="hbi-sub">Succeed</span>
-            </div>
-          </div>
-        </div>
-
         {/* Student image with floating tech pills */}
         <div className="students-illustration">
           <div className="image-glow-backdrop" />
@@ -201,6 +168,39 @@ export default function Login() {
             <div className="feature-strip-item">
               <Rocket size={18} color="#C8104D" />
               <span>Future Ready</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Feature Cards Row */}
+        <div className="hero-badges-row">
+          <div className="hero-badge-item">
+            <div className="hbi-icon-wrapper">
+              <Code2 size={22} />
+            </div>
+            <div className="hbi-text-container">
+              <span className="hbi-title">💻 Code.</span>
+              <span className="hbi-sub">Learn</span>
+            </div>
+          </div>
+          
+          <div className="hero-badge-item">
+            <div className="hbi-icon-wrapper">
+              <Lightbulb size={22} />
+            </div>
+            <div className="hbi-text-container">
+              <span className="hbi-title">💡 Think.</span>
+              <span className="hbi-sub">Innovate</span>
+            </div>
+          </div>
+
+          <div className="hero-badge-item">
+            <div className="hbi-icon-wrapper">
+              <BarChart2 size={22} />
+            </div>
+            <div className="hbi-text-container">
+              <span className="hbi-title">📈 Build.</span>
+              <span className="hbi-sub">Succeed</span>
             </div>
           </div>
         </div>
