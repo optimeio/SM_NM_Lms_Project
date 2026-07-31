@@ -6,7 +6,7 @@ import {
   Megaphone, ShieldCheck, Play, BookOpenCheck, Medal, Menu, X, Code2, Cpu, Wifi,
   Settings2, Compass, BarChart3, Sparkles
 } from 'lucide-react';
-import nmLogo from '../assets/nm_logo.png';
+import tnskillLogo from '../assets/tnskill_logo.png';
 import smLogo from '../assets/sm_logo.png';
 import '../styles/Dashboard.css';
 
@@ -19,12 +19,23 @@ export default function Dashboard() {
     college: '',
     department: '',
     year: '',
-    gender: ''
+    gender: '',
+    profileImage: ''
   });
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({});
   const [profileMessage, setProfileMessage] = useState('');
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfileForm(prev => ({ ...prev, profileImage: reader.result }));
+    };
+    reader.readAsDataURL(file);
+  };
 
   const [courseFilter, setCourseFilter] = useState('all');
   const [toastMessage, setToastMessage] = useState('');
@@ -36,17 +47,169 @@ export default function Dashboard() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
+  const handleDownloadPPT = (courseTitle, index, pptData, pptFileName) => {
+    const cleanName = pptFileName || (typeof pptData === 'string' && !pptData.startsWith('data:') && !pptData.startsWith('http') && !pptData.startsWith('/') ? pptData : `${courseTitle}_Module_${index + 1}.pptx`);
+    const finalFileName = cleanName.endsWith('.pptx') ? cleanName : `${cleanName}.pptx`;
+
+    if (typeof pptData === 'string' && (pptData.startsWith('data:') || pptData.startsWith('http') || pptData.startsWith('/'))) {
+      const a = document.createElement('a');
+      a.href = pptData;
+      a.download = finalFileName;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    const content = `=====================================================
+THE SM GROUPS | TNSKILL LEARNING PORTAL
+COURSE: ${(courseTitle || 'Engineering Course').toUpperCase()}
+MODULE PRESENTATION SLIDES: MODULE #${index + 1}
+FILE: ${finalFileName}
+=====================================================
+
+SLIDE 1: TITLE & OBJECTIVES
+- Course: ${courseTitle}
+- Subject: Module ${index + 1} Technical Core Concepts & Architecture
+- Presented By: SM Groups Engineering Faculty
+
+SLIDE 2: KEY CONCEPTS & SYSTEM ARCHITECTURE
+- Fundamental Principles & Industry Standards
+- Structural Components & Interfacing Overview
+- System Specifications & Protocol Workflows
+
+SLIDE 3: DETAILED TECHNICAL IMPLEMENTATION
+- Step-by-Step Execution Guidelines
+- Hardware/Software Integration Benchmarks
+- Troubleshooting & Performance Optimization
+
+SLIDE 4: PRACTICAL LAB EXERCISES & QUIZ PREPARATION
+- Review Exercises for Module ${index + 1}
+- Key Evaluation Criteria for Examination
+
+=====================================================
+Downloaded from SM Groups TNSkill LMS Portal
+Date: ${new Date().toLocaleDateString()}
+`;
+
+    const blob = new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = finalFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const generateQuizQuestionsForCourse = (courseTitle, type = 'mid') => {
+    const isMid = type === 'mid';
+    const titleLower = (courseTitle || '').toLowerCase();
+
+    const iotBank = [
+      { q: "What is the primary role of MQTT protocol in IoT architecture?", opts: ["Lightweight publish/subscribe messaging", "High latency video streaming", "Direct database SQL query execution", "Hardware BIOS flashing"], c: 0 },
+      { q: "Which operating system kernel is optimized for real-time microcontrollers?", opts: ["FreeRTOS", "Windows 11 Enterprise", "Android 14", "macOS Sonoma"], c: 0 },
+      { q: "In Raspberry Pi architecture, which bus is used for fast serial communication with sensors?", opts: ["SPI / I2C Bus", "SATA 3.0", "PCIe 4.0 x16", "DisplayPort 1.4"], c: 0 },
+      { q: "What GPIO voltage standard does Raspberry Pi 4 Model B use?", opts: ["3.3V Logic Level", "12V Automotive Standard", "110V AC Power Line", "5V High Power Direct Drive"], c: 0 },
+      { q: "Which protocol provides low-power wireless networking for IoT mesh nodes?", opts: ["Zigbee / IEEE 802.15.4", "HTTP/2 Uncompressed", "FTP Over TLS", "POP3 Mail Protocol"], c: 0 },
+      { q: "What is the function of ADC (Analog-to-Digital Converter) in embedded systems?", opts: ["Convert continuous sensor voltage to digital binary values", "Amplify audio speaker signals", "Encrypt WiFi network packets", "Step-down AC supply to DC"], c: 0 },
+      { q: "Which sensor measures relative humidity and environmental temperature?", opts: ["DHT22 / DHT11", "MPU6050 Gyroscope", "HC-SR04 Ultrasonic Sensor", "MQ-2 Gas Sensor"], c: 0 },
+      { q: "What is Edge Computing in the context of IoT deployment?", opts: ["Processing sensor data locally near the data source", "Storing all logs exclusively in remote cloud servers", "Using curved monitor displays for dashboards", "Routing network data through satellite relays"], c: 0 },
+      { q: "Which wireless frequency band is standard for LoRaWAN long-range communications in Asia/Europe?", opts: ["868 MHz / 915 MHz", "5.8 GHz WiFi", "24 GHz Radar", "60 GHz WiGig"], c: 0 },
+      { q: "What type of memory is non-volatile and retains microcontroller firmware code?", opts: ["Flash Memory / EEPROM", "SRAM Cache", "DDR4 System RAM", "CPU Registers"], c: 0 },
+      { q: "Which actuator converts electrical pulse signals into precise mechanical rotation steps?", opts: ["Stepper Motor", "Solid State Relay", "Solenoid Valve", "Piezoelectric Buzzer"], c: 0 },
+      { q: "In Embedded Linux, what is the primary purpose of Device Tree (.dts)?", opts: ["Describe hardware topology to the OS kernel without hardcoding", "Render graphical UI animations", "Compile C++ application source files", "Manage user login passwords"], c: 0 },
+      { q: "What is the maximum theoretical data transfer speed of standard I2C Fast-Mode?", opts: ["400 kbps", "10 Gbps", "100 Mbps", "1.5 Mbps"], c: 0 },
+      { q: "Which hardware watchdog mechanism prevents embedded systems from freezing indefinitely?", opts: ["Watchdog Timer (WDT) reset trigger", "CPU Overclock Governor", "Thermal Throttling Fan Controller", "DMA Controller Interrupt"], c: 0 },
+      { q: "What is the primary advantage of CAN bus in automotive and industrial IoT?", opts: ["High noise immunity and differential signaling", "Unlimited payload package size", "Built-in web server support", "Optical fiber transmission compatibility"], c: 0 },
+      { q: "What is the purpose of PWM (Pulse Width Modulation) in microcontroller GPIO outputs?", opts: ["Vary effective voltage supply to control motor speed & LED brightness", "Increase network upload bandwidth", "Encrypt serial data transmissions", "Measure barometric pressure"], c: 0 },
+      { q: "Which layer of the IoT 7-layer architecture handles sensor data acquisition?", opts: ["Perception / Sensing Layer", "Application Layer", "Business Layer", "Middleware Layer"], c: 0 },
+      { q: "What does CoAP (Constrained Application Protocol) run on top of?", opts: ["UDP Protocol", "TCP Protocol", "BGP Routing", "ICMP Ping"], c: 0 },
+      { q: "Which Linux command is used to inspect active serial ports connected to Raspberry Pi?", opts: ["ls /dev/tty*", "ipconfig /all", "netstat -an", "systemctl status gpio"], c: 0 },
+      { q: "What is the primary function of an Optocoupler in industrial embedded circuits?", opts: ["Electrical isolation between high-voltage circuits and microcontrollers", "Audio signal synthesis", "Battery charging management", "Wireless RF signal amplification"], c: 0 },
+      { q: "Which battery chemistry is most commonly used for rechargeable IoT edge nodes due to high energy density?", opts: ["Lithium Polymer (LiPo) / Li-ion", "Lead Acid", "Nickel Cadmium (NiCd)", "Zinc Air"], c: 0 },
+      { q: "What does ESP32 microcontroller provide natively on-chip?", opts: ["Integrated 2.4GHz WiFi & Bluetooth Dual-Mode", "10 Gbps Ethernet Port", "GPU 3D Ray Tracing Cores", "SATA Hard Drive Interface"], c: 0 },
+      { q: "Which protocol is used for securely upgrading firmware over-the-air in remote IoT devices?", opts: ["FOTA (Firmware Over-The-Air) via TLS", "FTP unencrypted", "Telnet port 23", "TFTP without authentication"], c: 0 },
+      { q: "What is the purpose of a Pull-Up resistor on a microcontroller digital input pin?", opts: ["Ensure a default HIGH logic state when switch is open", "Double the clock frequency", "Block AC current ripple", "Drain static charge to ground"], c: 0 },
+      { q: "In Python for Raspberry Pi, which library is widely used to control GPIO hardware pins?", opts: ["RPi.GPIO / gpiozero", "pandas", "django", "tensorflow"], c: 0 }
+    ];
+
+    const genBank = [
+      { q: "Which data structure operates on a Last-In, First-Out (LIFO) principle?", opts: ["Stack", "Queue", "Linked List", "Binary Tree"], c: 0 },
+      { q: "What is the time complexity of searching an element in a balanced Binary Search Tree?", opts: ["O(log N)", "O(N^2)", "O(1)", "O(N log N)"], c: 0 },
+      { q: "In Database Management Systems, what does the 'A' in ACID properties stand for?", opts: ["Atomicity", "Availability", "Authentication", "Abstraction"], c: 0 },
+      { q: "Which OSI layer is responsible for end-to-end packet routing and IP addressing?", opts: ["Network Layer (Layer 3)", "Physical Layer (Layer 1)", "Application Layer (Layer 7)", "Data Link Layer (Layer 2)"], c: 0 },
+      { q: "What is the main purpose of Version Control Systems like Git?", opts: ["Track source code changes and collaborate across branches", "Automate CPU clock speed adjustment", "Render 3D graphics models", "Compile Java bytecode"], c: 0 },
+      { q: "Which HTTP status code indicates a successful resource creation?", opts: ["201 Created", "404 Not Found", "500 Internal Server Error", "302 Found Redirect"], c: 0 },
+      { q: "What is the primary role of a Load Balancer in web architecture?", opts: ["Distribute incoming network traffic across multiple servers", "Encrypt database tables on disk", "Generate CSS styling themes", "Compress JPEG images"], c: 0 },
+      { q: "In Object-Oriented Programming, what is Polymorphism?", opts: ["Ability of different classes to respond to the same method call in unique ways", "Storing data in constant variables", "Compiling code to assembly", "Running multiple OS virtual machines"], c: 0 },
+      { q: "Which algorithm is commonly used for finding the shortest path in a weighted graph?", opts: ["Dijkstra's Algorithm", "Bubble Sort", "Binary Search", "K-Means Clustering"], c: 0 },
+      { q: "What is the function of DNS (Domain Name System) in internet networking?", opts: ["Translate domain names into IP addresses", "Protect servers against power surges", "Manage browser cookies", "Render HTML DOM elements"], c: 0 },
+      { q: "Which sorting algorithm has a worst-case time complexity of O(N log N)?", opts: ["Merge Sort", "Bubble Sort", "Insertion Sort", "Selection Sort"], c: 0 },
+      { q: "What is a Deadlock in operating system process synchronization?", opts: ["A state where two or more processes are blocked waiting for resources held by each other", "A CPU clock speed crash", "An invalid pointer dereference", "A network buffer overflow"], c: 0 },
+      { q: "In RESTful API design, which HTTP method is idempotent for updating resources?", opts: ["PUT", "POST", "CONNECT", "TRACE"], c: 0 },
+      { q: "Which memory management concept maps virtual addresses to physical RAM frames?", opts: ["Paging & Page Tables", "Garbage Collection", "Stack Allocation", "DMA Register Masking"], c: 0 },
+      { q: "What is the main difference between TCP and UDP protocols?", opts: ["TCP is connection-oriented and reliable, UDP is connectionless and faster", "TCP only works on fiber optic cables", "UDP guarantees packet order delivery", "TCP operates on Layer 2"], c: 0 },
+      { q: "Which design pattern ensures a class has only one single instance throughout the application?", opts: ["Singleton Pattern", "Factory Pattern", "Observer Pattern", "Strategy Pattern"], c: 0 },
+      { q: "What is an Index in SQL databases used for?", opts: ["Speed up data retrieval queries at the cost of additional storage", "Prevent user login authorization", "Export tables to Excel format", "Truncate table records"], c: 0 },
+      { q: "What is the purpose of Docker containers in software deployment?", opts: ["Package applications with dependencies into isolated reproducible environments", "Replace hardware CPUs", "Increase monitor refresh rate", "Scan hard drives for bad sectors"], c: 0 },
+      { q: "In JavaScript, what is Closure?", opts: ["A function bundled with references to its surrounding lexical environment", "A syntax error that stops execution", "An object constructor function", "A CSS layout grid property"], c: 0 },
+      { q: "What does TLS (Transport Layer Security) provide for Web HTTPS connections?", opts: ["Data encryption, integrity, and server authentication", "Automatic HTML minification", "Faster DNS lookup resolution", "FTP file compression"], c: 0 },
+      { q: "Which data structure uses key-value mapping with O(1) average lookup time?", opts: ["Hash Map / Dictionary", "Array List", "Singly Linked List", "Binary Search Tree"], c: 0 },
+      { q: "What is the purpose of a JWT (JSON Web Token)?", opts: ["Securely transmit claims between parties as a compact JSON object", "Store large video files on client browser", "Compile C++ code", "Manage CSS styling variables"], c: 0 },
+      { q: "In Agile methodology, what is the purpose of a Daily Standup meeting?", opts: ["Quick alignment on progress, plans, and blockers", "Complete code review of all commits", "Negotiate client contract budget", "Conduct formal annual employee appraisal"], c: 0 },
+      { q: "What does CI/CD stand for in DevOps practices?", opts: ["Continuous Integration & Continuous Deployment", "Central Interface & Control Device", "Code Inspection & Data Compilation", "Computer Infrastructure & Data Center"], c: 0 },
+      { q: "Which Cloud Computing model provides virtual machines and storage infrastructure (e.g. AWS EC2)?", opts: ["IaaS (Infrastructure as a Service)", "SaaS (Software as a Service)", "PaaS (Platform as a Service)", "FaaS (Function as a Service)"], c: 0 }
+    ];
+
+    const bank = (titleLower.includes('iot') || titleLower.includes('embedded') || titleLower.includes('raspberry') || titleLower.includes('sensor')) ? iotBank : genBank;
+
+    const questions = [];
+    for (let i = 0; i < 25; i++) {
+      const item = bank[i % bank.length];
+      questions.push({
+        id: i + 1,
+        question: `${isMid ? 'Mid-Exam' : 'Final Assessment'} Q${i + 1}: ${item.q}`,
+        options: item.opts,
+        correctAnswer: item.c,
+        marks: 1
+      });
+    }
+
+    return questions;
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (!storedUser) {
       navigate('/login');
       return;
     }
-    const parsedUser = JSON.parse(storedUser);
+    let parsedUser = JSON.parse(storedUser);
     if (parsedUser.role === 'admin') {
       navigate('/admin');
       return;
     }
+
+    // Sync latest user details from registeredUsers to get up-to-date assignedCourses list
+    const storedUsersRaw = localStorage.getItem('registeredUsers');
+    if (storedUsersRaw) {
+      try {
+        const registeredUsers = JSON.parse(storedUsersRaw);
+        const match = registeredUsers.find(u => 
+          (u.email && parsedUser.email && u.email.toLowerCase() === parsedUser.email.toLowerCase()) ||
+          (u._id && parsedUser._id && String(u._id) === String(parsedUser._id))
+        );
+        if (match) {
+          parsedUser = { ...parsedUser, ...match };
+        }
+      } catch (e) {
+        console.warn('Error reading registeredUsers:', e);
+      }
+    }
+
     setUser(parsedUser);
     setProfileForm(parsedUser);
   }, [navigate]);
@@ -82,26 +245,282 @@ export default function Dashboard() {
   const menuItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'My Courses', icon: <BookOpen size={20} /> },
-    { name: 'Live Classes', icon: <Video size={20} /> },
-    { name: 'Assignments', icon: <FileText size={20} /> },
     { name: 'Exams', icon: <ShieldCheck size={20} /> },
     { name: 'Certificates', icon: <Award size={20} /> },
-    { name: 'Study Materials', icon: <FolderOpen size={20} /> },
-    { name: 'Leaderboard', icon: <Trophy size={20} /> },
-    { name: 'Messages', icon: <MessageSquare size={20} />, badge: 2 },
+    { name: 'Messages', icon: <MessageSquare size={20} /> },
     { name: 'Calendar', icon: <Calendar size={20} /> },
     { name: 'Profile', icon: <User size={20} /> },
-    { name: 'Settings', icon: <Settings size={20} /> },
   ];
+  const [allCoursesData, setAllCoursesData] = useState([]);
+  const [activeCourse, setActiveCourse] = useState(null);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [activeQuizModal, setActiveQuizModal] = useState(null); // 'mid' | 'final' | null
+  const [activePptViewerModal, setActivePptViewerModal] = useState(null);
+  const [videoWatchProgress, setVideoWatchProgress] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizResult, setQuizResult] = useState(null);
+  const [isRetakingQuiz, setIsRetakingQuiz] = useState(false);
 
-  const allCoursesData = [
-    { id: 1, title: 'Python Programming for Beginners', category: 'Software & Coding', progress: 72, lessons: '12 / 16 Lessons', color: '#3B82F6', icon: <Code2 size={22} color="#3B82F6" />, status: 'progress' },
-    { id: 2, title: 'PCB Design & Schematics Modelling', category: 'Hardware Electronics', progress: 45, lessons: '8 / 18 Lessons', color: '#10B981', icon: <Cpu size={22} color="#10B981" />, status: 'progress' },
-    { id: 3, title: 'IoT Systems & Sensors Interfacing', category: 'Embedded & IoT', progress: 90, lessons: '18 / 20 Lessons', color: '#F59E0B', icon: <Wifi size={22} color="#F59E0B" />, status: 'progress' },
-    { id: 4, title: 'Microcontroller Architecture & Assembly', category: 'Embedded Systems', progress: 30, lessons: '5 / 15 Lessons', color: '#8B5CF6', icon: <Settings2 size={22} color="#8B5CF6" />, status: 'progress' },
-    { id: 5, title: 'Surface Modelling & CAD Design', category: 'Mechanical & CAD', progress: 100, lessons: '14 / 14 Lessons', color: '#EC4899', icon: <Compass size={22} color="#EC4899" />, status: 'completed' },
-    { id: 6, title: 'Data Structures & Algorithms', category: 'Computer Science', progress: 100, lessons: '22 / 22 Lessons', color: '#EF4444', icon: <BarChart3 size={22} color="#EF4444" />, status: 'completed' }
-  ];
+  // Helper: Verify if a course is active and published
+  const isCoursePublished = (course) => {
+    if (!course) return false;
+    if (course.is_active === false || course.approval_status === false) return false;
+    if (course.isPublished === false || course.status === 'draft') return false;
+    return true;
+  };
+
+  // Helper: Verify if a course is assigned to the current student (or student's department/college/all)
+  const isCourseAssignedToUser = (course, currentUser) => {
+    if (!course || !currentUser) return false;
+    
+    const courseCode = String(course.course_unique_code || course.course_id || course.id || course.title || '').trim().toLowerCase();
+    const courseTitle = String(course.title || course.name || course.course_name || '').trim().toLowerCase();
+
+    const userAssigned = Array.isArray(currentUser.assignedCourses) ? currentUser.assignedCourses : [];
+    const userMainCode = currentUser.course_unique_code ? String(currentUser.course_unique_code).trim().toLowerCase() : '';
+
+    // 1. If user has explicit assignedCourses list
+    if (userAssigned.length > 0) {
+      return userAssigned.some(ac => {
+        const codeStr = String(ac).trim().toLowerCase();
+        return codeStr === courseCode || codeStr === courseTitle || (courseCode && codeStr.includes(courseCode)) || (courseTitle && codeStr.includes(courseTitle));
+      });
+    }
+
+    // 2. If user has a main course_unique_code assigned
+    if (userMainCode) {
+      return userMainCode === courseCode || userMainCode === courseTitle;
+    }
+
+    // 3. If user explicitly has assignedCourses = [] (no courses assigned)
+    if (Array.isArray(currentUser.assignedCourses) && currentUser.assignedCourses.length === 0) {
+      return false;
+    }
+
+    // 4. Fallback: check target scope (all / college / department / individual)
+    const targetScope = String(course.autoAssignTo || course.assignedTo || course.targetMode || 'all').toLowerCase();
+    const targetCollege = String(course.autoAssignCollege || course.targetCollege || 'ALL').trim().toUpperCase();
+    const targetDept = String(course.autoAssignDept || course.targetDept || 'ALL').trim().toUpperCase();
+    const userCollege = String(currentUser.college || '').trim().toUpperCase();
+    const userDept = String(currentUser.department || '').trim().toUpperCase();
+
+    if (targetScope === 'all') {
+      return true;
+    } else if (targetScope === 'college') {
+      return targetCollege === 'ALL' || targetCollege === userCollege;
+    } else if (targetScope === 'department') {
+      const matchesCollege = targetCollege === 'ALL' || targetCollege === userCollege;
+      const matchesDept = targetDept === 'ALL' || targetDept === userDept;
+      return matchesCollege && matchesDept;
+    } else if (targetScope === 'individual') {
+      const targetEmails = (course.autoAssignStudents || course.selectedStudentEmails || []).map(e => String(e).toLowerCase());
+      return targetEmails.includes(String(currentUser.email || '').toLowerCase());
+    }
+
+    return true;
+  };
+
+  useEffect(() => {
+    const fetchUserCourses = async () => {
+      const localCoursesRaw = localStorage.getItem('createdCourses');
+      const localCourses = localCoursesRaw ? JSON.parse(localCoursesRaw) : [];
+      const localMapped = localCourses.map((c, idx) => ({
+        id: c.course_unique_code || c.id || idx,
+        course_unique_code: c.course_unique_code || c.id || `COURSE-${idx}`,
+        title: c.course_name || c.title,
+        category: c.category || 'General',
+        image: c.course_image_url || c.image,
+        progress: c.progress || 0,
+        lessons: '12 Videos & 12 PPTs',
+        color: '#3B82F6',
+        icon: <Code2 size={22} color="#3B82F6" />,
+        status: c.status || 'progress',
+        is_active: c.is_active !== undefined ? c.is_active : true,
+        approval_status: c.approval_status !== undefined ? c.approval_status : true,
+        videos: c.videos || Array.from({ length: 12 }, (_, i) => `Video #${i + 1}: ${c.course_name || c.title} Module ${i + 1}`),
+        ppts: c.ppts || Array.from({ length: 12 }, (_, i) => `PPT #${i + 1}: ${c.course_name || c.title} Slides ${i + 1}`),
+        pptsNames: c.pptsNames || [],
+        midQuiz: c.midQuiz,
+        finalQuiz: c.finalQuiz,
+        midQuizPassed: false,
+        finalQuizPassed: false,
+        completedVideos: c.completedVideos || 0
+      }));
+
+      try {
+        const userId = user?.email || user?.user_unique_id || 'student_123';
+        let serverProgressMap = {};
+        try {
+          const progRes = await fetch(`/api/user/progress?user_unique_id=${encodeURIComponent(userId)}`);
+          if (progRes.ok) {
+            const progData = await progRes.json();
+            if (progData.user_progress && Array.isArray(progData.user_progress)) {
+              progData.user_progress.forEach(p => {
+                serverProgressMap[p.course_unique_code] = p;
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        const localProgressRaw = localStorage.getItem('userCourseProgress') || '{}';
+        const localProgressMap = JSON.parse(localProgressRaw);
+
+        const res = await fetch('/lms/client/courses/');
+        let finalCourses = [];
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success || data.courses_list) {
+            const list = data.courses_list || data.courses || [];
+            const apiMapped = list.map((c, idx) => ({
+              id: c.course_id || c._id || c.id || idx,
+              course_unique_code: c.course_id || c.course_unique_code || `COURSE-${idx}`,
+              title: c.name || c.course_name || c.title,
+              category: c.category || 'General',
+              image: c.course_image_url || c.image,
+              progress: c.progress || 0,
+              lessons: '12 Videos & 12 PPTs',
+              color: '#3B82F6',
+              icon: <Code2 size={22} color="#3B82F6" />,
+              status: c.status || 'progress',
+              is_active: c.course_status !== undefined ? c.course_status : (c.is_active !== undefined ? c.is_active : true),
+              approval_status: c.approval_status !== undefined ? c.approval_status : true,
+              videos: c.videos || Array.from({ length: 12 }, (_, i) => `Video #${i + 1}: ${c.name || c.title} Module ${i + 1}`),
+              ppts: c.ppts || Array.from({ length: 12 }, (_, i) => `PPT #${i + 1}: ${c.name || c.title} Slides ${i + 1}`),
+              pptsNames: c.pptsNames || [],
+              midQuiz: c.midQuiz,
+              finalQuiz: c.finalQuiz,
+              midQuizPassed: false,
+              finalQuizPassed: false,
+              completedVideos: c.completedVideos || 0
+            }));
+
+            const localMap = new Map(localMapped.map(c => [c.course_unique_code || c.title, c]));
+            const mergedApi = apiMapped.map(apiCourse => {
+              const code = apiCourse.course_unique_code || apiCourse.title;
+              const local = localMap.get(code);
+              if (local) {
+                return {
+                  ...apiCourse,
+                  videos: (local.videos && local.videos.some(v => v && (v.startsWith('data:') || v.startsWith('/courses/')))) ? local.videos : apiCourse.videos,
+                  ppts: (local.ppts && local.ppts.some(p => p && (p.startsWith('data:') || p.startsWith('/courses/')))) ? local.ppts : apiCourse.ppts,
+                  midQuiz: local.midQuiz || apiCourse.midQuiz,
+                  finalQuiz: local.finalQuiz || apiCourse.finalQuiz
+                };
+              }
+              return apiCourse;
+            });
+
+            const apiCodes = new Set(apiMapped.map(c => c.course_unique_code || c.title));
+            const uniqueLocal = localMapped.filter(c => !apiCodes.has(c.course_unique_code || c.title));
+            finalCourses = [...mergedApi, ...uniqueLocal];
+          } else if (localMapped.length > 0) {
+            finalCourses = localMapped;
+          }
+        } else if (localMapped.length > 0) {
+          finalCourses = localMapped;
+        }
+
+        // Apply saved user progress (from server or local map) to all courses
+        const hydratedCourses = finalCourses.map(c => {
+          const code = c.course_unique_code || c.id;
+          const progKey = `${userId}_${code}`;
+          const savedProg = serverProgressMap[code] || localProgressMap[progKey];
+          if (savedProg) {
+            return {
+              ...c,
+              progress: savedProg.progress_percentage !== undefined ? Number(savedProg.progress_percentage) : (c.progress || 0),
+              completedVideos: savedProg.completedVideos !== undefined ? Number(savedProg.completedVideos) : (c.completedVideos || 0),
+              midQuizPassed: savedProg.midQuizPassed !== undefined ? Boolean(savedProg.midQuizPassed) : (c.midQuizPassed || false),
+              midQuizScore: savedProg.midQuizScore !== undefined ? Number(savedProg.midQuizScore) : (c.midQuizScore || 0),
+              finalQuizPassed: savedProg.finalQuizPassed !== undefined ? Boolean(savedProg.finalQuizPassed) : (c.finalQuizPassed || false),
+              finalQuizScore: savedProg.finalQuizScore !== undefined ? Number(savedProg.finalQuizScore) : (c.finalQuizScore || 0),
+              status: (savedProg.course_complete === 'true' || savedProg.course_complete === true || Number(savedProg.progress_percentage) === 100) ? 'completed' : 'progress'
+            };
+          }
+          return c;
+        });
+
+        // Determine current user data
+        let latestUser = user;
+        const storedUsersRaw = localStorage.getItem('registeredUsers');
+        if (storedUsersRaw) {
+          try {
+            const registeredUsers = JSON.parse(storedUsersRaw);
+            const match = registeredUsers.find(u => 
+              (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+              (u._id && user._id && String(u._id) === String(user._id))
+            );
+            if (match) latestUser = { ...user, ...match };
+          } catch {}
+        }
+
+        // Filter courses: ONLY show courses that are PUBLISHED AND ASSIGNED to this student/department/college/all
+        const visibleCourses = hydratedCourses.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
+        setAllCoursesData(visibleCourses);
+      } catch {
+        if (localMapped.length > 0) {
+          let latestUser = user;
+          const storedUsersRaw = localStorage.getItem('registeredUsers');
+          if (storedUsersRaw) {
+            try {
+              const registeredUsers = JSON.parse(storedUsersRaw);
+              const match = registeredUsers.find(u => 
+                (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+                (u._id && user._id && String(u._id) === String(user._id))
+              );
+              if (match) latestUser = { ...user, ...match };
+            } catch {}
+          }
+          const visibleCourses = localMapped.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
+          setAllCoursesData(visibleCourses);
+        }
+      }
+    };
+    fetchUserCourses();
+  }, [user]);
+
+  const sendProgressUpdate = async (courseCode, percentage, isComplete = false, extraData = {}) => {
+    try {
+      const userId = user?.email || user?.user_unique_id || 'student_123';
+      const payload = {
+        user_unique_id: userId,
+        course_unique_code: courseCode,
+        progress_percentage: String(percentage),
+        course_complete: String(isComplete),
+        assessment_status: String(extraData.assessment_status ?? (activeCourse?.finalQuizPassed || isComplete)),
+        certificate_issued: String(extraData.certificate_issued ?? (percentage === 100)),
+        completedVideos: extraData.completedVideos ?? activeCourse?.completedVideos ?? 0,
+        midQuizPassed: extraData.midQuizPassed ?? activeCourse?.midQuizPassed ?? false,
+        midQuizScore: extraData.midQuizScore ?? activeCourse?.midQuizScore ?? 0,
+        finalQuizPassed: extraData.finalQuizPassed ?? activeCourse?.finalQuizPassed ?? false,
+        finalQuizScore: extraData.finalQuizScore ?? activeCourse?.finalQuizScore ?? 0
+      };
+      if (extraData.total_score) {
+        payload.total_score = String(extraData.total_score);
+      }
+
+      // 1. Save to local storage map for instant offline recovery
+      const localProgressRaw = localStorage.getItem('userCourseProgress') || '{}';
+      const localProgressMap = JSON.parse(localProgressRaw);
+      localProgressMap[`${userId}_${courseCode}`] = payload;
+      localStorage.setItem('userCourseProgress', JSON.stringify(localProgressMap));
+
+      // 2. Send POST to backend user tracking route (which syncs to NM portal)
+      await fetch('/api/v1/lms/client/course/xf/user-tracking', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'sm_nm_token_2026'}`
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Progress sync error:', err);
+    }
+  };
 
   const filteredCourses = allCoursesData.filter(c => {
     const matchesFilter = courseFilter === 'all' || c.status === courseFilter;
@@ -122,7 +541,7 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside className={`db-sidebar ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-brand-area">
-          <img src={nmLogo} alt="Naan Mudhalvan Logo" className="db-sidebar-logo" />
+          <img src={tnskillLogo} alt="TNSkill Logo" className="db-sidebar-logo" />
           <div className="powered-by-box">
             <span className="powered-text">POWERED BY</span>
             <img src={smLogo} alt="SM Groups Logo" className="db-powered-logo" />
@@ -206,19 +625,35 @@ export default function Dashboard() {
               className="control-btn notification-btn"
               onClick={() => {
                 setActiveTab('Messages');
-                triggerToast('🔔 Displaying your recent notifications');
+                triggerToast('🔔 Displaying your notifications');
               }}
             >
               <Bell size={20} />
-              <span className="bell-badge-count">3</span>
             </button>
 
             <div className="db-user-dropdown" onClick={() => { setActiveTab('Profile'); setProfileForm(user); }}>
-              <img 
-                src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop" 
-                alt="Profile Avatar" 
-                className="user-avatar-img" 
-              />
+              {user.profileImage ? (
+                <img 
+                  src={user.profileImage} 
+                  alt="Profile Avatar" 
+                  className="user-avatar-img" 
+                />
+              ) : (
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'var(--primary-red)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '16px'
+                }}>
+                  {(user.fullName || 'S').charAt(0).toUpperCase()}
+                </div>
+              )}
               <ChevronDown size={16} className="dropdown-arrow" />
             </div>
           </div>
@@ -264,7 +699,7 @@ export default function Dashboard() {
                     <GraduationCap size={24} className="stat-icon-cap" />
                   </div>
                   <div className="stat-text-info">
-                    <h3>12</h3>
+                    <h3>{allCoursesData.length}</h3>
                     <p>Enrolled Courses</p>
                   </div>
                 </div>
@@ -274,28 +709,8 @@ export default function Dashboard() {
                     <BookOpenCheck size={24} className="stat-icon-book" />
                   </div>
                   <div className="stat-text-info">
-                    <h3>6</h3>
+                    <h3>{allCoursesData.filter(c => c.progress === 100).length}</h3>
                     <p>Completed Courses</p>
-                  </div>
-                </div>
-
-                <div className="db-stat-card" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('Leaderboard')}>
-                  <div className="stat-icon-container points-bg">
-                    <Medal size={24} className="stat-icon-points" />
-                  </div>
-                  <div className="stat-text-info">
-                    <h3>1250</h3>
-                    <p>Reward Points</p>
-                  </div>
-                </div>
-
-                <div className="db-stat-card" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('Leaderboard')}>
-                  <div className="stat-icon-container rank-bg">
-                    <Trophy size={24} className="stat-icon-rank" />
-                  </div>
-                  <div className="stat-text-info">
-                    <h3>Top 15%</h3>
-                    <p>Leaderboard Rank</p>
                   </div>
                 </div>
               </div>
@@ -309,7 +724,7 @@ export default function Dashboard() {
                     <div className="banner-text-content">
                       <h2>Learn Today, Lead Tomorrow!</h2>
                       <p>
-                        Explore quality courses, join live classes, complete assignments and achieve your goals.
+                        Explore quality courses, complete exams and achieve your goals.
                       </p>
                       <button className="btn-banner-explore" onClick={() => setActiveTab('My Courses')}>Explore Courses &rarr;</button>
                     </div>
@@ -330,27 +745,29 @@ export default function Dashboard() {
                     </div>
 
                     <div className="learning-progress-card">
-                      <div className="course-progress-info">
-                        <div className="course-logo-circle">
-                          <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg" 
-                            alt="Python Logo" 
-                            className="course-logo-img" 
-                          />
-                        </div>
-                        <div className="course-details-wrap">
-                          <h4>Python Programming for Beginners</h4>
-                          <span className="course-sub-label">Course Progress</span>
-                          <div className="progress-bar-container">
-                            <div className="progress-bar-filled" style={{ width: '72%' }}></div>
+                      {allCoursesData.length > 0 ? (
+                        <div className="course-progress-info">
+                          <div className="course-logo-circle">
+                            <Code2 size={22} color="#3B82F6" />
                           </div>
-                          <div className="progress-meta-text">
-                            <span>12 / 16 Lessons Completed</span>
-                            <span className="percentage-text">72%</span>
+                          <div className="course-details-wrap">
+                            <h4>{allCoursesData[0].title}</h4>
+                            <span className="course-sub-label">Course Progress</span>
+                            <div className="progress-bar-container">
+                              <div className="progress-bar-filled" style={{ width: `${allCoursesData[0].progress}%` }}></div>
+                            </div>
+                            <div className="progress-meta-text">
+                              <span>{allCoursesData[0].lessons}</span>
+                              <span className="percentage-text">{allCoursesData[0].progress}%</span>
+                            </div>
                           </div>
+                          <button className="btn-continue-learning" onClick={() => { setActiveTab('My Courses'); triggerToast(`🚀 Resuming ${allCoursesData[0].title}...`); }}>Continue Learning</button>
                         </div>
-                        <button className="btn-continue-learning" onClick={() => { setActiveTab('My Courses'); triggerToast('🚀 Resuming Python Programming for Beginners...'); }}>Continue Learning</button>
-                      </div>
+                      ) : (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
+                          No active courses assigned yet. Check back soon!
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -362,25 +779,14 @@ export default function Dashboard() {
                     </div>
 
                     <div className="announcements-list">
-                      <div className="announcement-item" style={{ cursor: 'pointer' }} onClick={() => triggerToast('📢 Holiday Notice: College closed on May 27th.')}>
-                        <div className="announcement-icon-circle icon-red">
+                      <div className="announcement-item" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('Messages')}>
+                        <div className="announcement-icon-circle icon-blue">
                           <Megaphone size={18} />
                         </div>
                         <div className="announcement-text-details">
-                          <h4>Holiday Notice</h4>
-                          <p>College will remain closed on May 27, 2024 on account of Memorial Day.</p>
-                          <span className="announcement-time-stamp">2 hours ago</span>
-                        </div>
-                      </div>
-
-                      <div className="announcement-item" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('Exams')}>
-                        <div className="announcement-icon-circle icon-blue">
-                          <Calendar size={18} />
-                        </div>
-                        <div className="announcement-text-details">
-                          <h4>Exam Schedule Released</h4>
-                          <p>End Semester Examination Timetable is now available.</p>
-                          <span className="announcement-time-stamp">1 day ago</span>
+                          <h4>Welcome to TNSkill Platform</h4>
+                          <p>Welcome to the learning management portal. Stay tuned for course updates and exams.</p>
+                          <span className="announcement-time-stamp">Just now</span>
                         </div>
                       </div>
                     </div>
@@ -389,37 +795,6 @@ export default function Dashboard() {
 
                 {/* Right Column */}
                 <div className="grid-right-col">
-                  {/* Upcoming Live Class */}
-                  <div className="db-live-class-card">
-                    <div className="widget-header">
-                      <h3>Upcoming Live Class</h3>
-                      <button className="widget-view-all" onClick={() => setActiveTab('Live Classes')}>View All</button>
-                    </div>
-
-                    <div className="live-class-details-card">
-                      <div className="live-class-header-row">
-                        <div className="date-badge-box">
-                          <span className="date-month">MAY</span>
-                          <span className="date-day">24</span>
-                          <span className="date-weekday">Fri</span>
-                        </div>
-                        <div className="time-instructor-details">
-                          <span className="live-time-slot">10:00 AM - 11:30 AM</span>
-                          <h4>Data Structures Using Python</h4>
-                          <span className="instructor-name">by Mr. Dinesh Kumar</span>
-                        </div>
-                      </div>
-                      <div className="live-badge-glow-wrap">
-                        <span className="live-glow-dot"></span>
-                        <span className="live-text-tag">Live Class</span>
-                      </div>
-                      <button className="btn-join-live-class" onClick={() => { setActiveTab('Live Classes'); triggerToast('🎥 Connecting to Data Structures Live Stream...'); }}>
-                        <Play size={16} fill="currentColor" style={{ marginRight: '6px' }} />
-                        <span>Join Class</span>
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Quick Access Grid */}
                   <div className="db-quick-access-widget">
                     <h3>Quick Access</h3>
@@ -429,20 +804,6 @@ export default function Dashboard() {
                           <BookOpen size={20} />
                         </div>
                         <span>My Courses</span>
-                      </button>
-
-                      <button className="quick-access-btn" onClick={() => setActiveTab('Live Classes')}>
-                        <div className="quick-icon-circle icon-bg-blue">
-                          <Video size={20} />
-                        </div>
-                        <span>Live Classes</span>
-                      </button>
-
-                      <button className="quick-access-btn" onClick={() => setActiveTab('Assignments')}>
-                        <div className="quick-icon-circle icon-bg-orange">
-                          <FileText size={20} />
-                        </div>
-                        <span>Assignments</span>
                       </button>
 
                       <button className="quick-access-btn" onClick={() => setActiveTab('Exams')}>
@@ -469,149 +830,641 @@ export default function Dashboard() {
                 <h3>My Enrolled Courses</h3>
                 <div className="tab-filter-pills">
                   <button className={`tab-pill ${courseFilter === 'all' ? 'active' : ''}`} onClick={() => setCourseFilter('all')}>All Courses ({allCoursesData.length})</button>
-                  <button className={`tab-pill ${courseFilter === 'progress' ? 'active' : ''}`} onClick={() => setCourseFilter('progress')}>In Progress (4)</button>
-                  <button className={`tab-pill ${courseFilter === 'completed' ? 'active' : ''}`} onClick={() => setCourseFilter('completed')}>Completed (2)</button>
+                  <button className={`tab-pill ${courseFilter === 'progress' ? 'active' : ''}`} onClick={() => setCourseFilter('progress')}>In Progress ({allCoursesData.filter(c => c.progress < 100).length})</button>
+                  <button className={`tab-pill ${courseFilter === 'completed' ? 'active' : ''}`} onClick={() => setCourseFilter('completed')}>Completed ({allCoursesData.filter(c => c.progress === 100).length})</button>
                 </div>
               </div>
               <div className="courses-cards-grid">
                 {filteredCourses.map(course => (
                   <div key={course.id} className="custom-course-card">
-                    <div className="ccc-badge-row">
-                      <span className="ccc-icon-tag">{course.icon}</span>
-                      <span className="ccc-cat-label">{course.category}</span>
-                    </div>
-                    <h4>{course.title}</h4>
-                    <div className="ccc-progress-wrap">
-                      <div className="ccc-bar-bg">
-                        <div className="ccc-bar-fill" style={{ width: `${course.progress}%`, background: course.color }}></div>
-                      </div>
-                      <div className="ccc-meta-info">
-                        <span>{course.lessons}</span>
-                        <strong>{course.progress}%</strong>
-                      </div>
-                    </div>
-                    <button 
-                      className="btn-ccc-action"
-                      onClick={() => triggerToast(course.progress === 100 ? `✓ ${course.title} is completed! Reviewing certificate.` : `🚀 Opening ${course.title} workspace...`)}
-                    >
-                      {course.progress === 100 ? 'Review Course ✓' : 'Continue Learning →'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : activeTab === 'Live Classes' ? (
-            <div className="db-tab-content-container">
-              <div className="tab-header-row">
-                <h3>Live Interactive Classes</h3>
-                <span className="live-status-pill">🔴 1 Session Live Now</span>
-              </div>
-              <div className="live-sessions-list">
-                {[
-                  { id: 1, title: 'Data Structures Using Python (Masterclass)', time: 'Today, 10:00 AM - 11:30 AM', instructor: 'Mr. Dinesh Kumar', status: 'LIVE NOW', isLive: true },
-                  { id: 2, title: 'PCB Layout Design Routing Workshop', time: 'Tomorrow, 02:00 PM - 04:00 PM', instructor: 'Dr. S. Kanthaswamy', status: 'UPCOMING', isLive: false },
-                  { id: 3, title: 'Sensors Interfacing & ESP32 Microcontrollers', time: 'May 28, 11:00 AM - 01:00 PM', instructor: 'Prof. Anitha R', status: 'SCHEDULED', isLive: false }
-                ].map(session => (
-                  <div key={session.id} className={`live-session-item ${session.isLive ? 'highlight-live' : ''}`}>
-                    <div className="lsi-left">
-                      <div className="lsi-icon-box">
-                        <Video size={24} color={session.isLive ? '#DC2626' : '#2563EB'} />
-                      </div>
-                      <div className="lsi-info">
-                        <h4>{session.title}</h4>
-                        <p>Instructor: <strong>{session.instructor}</strong> • {session.time}</p>
+                    {/* Course Cover Image Banner Header */}
+                    <div className="ccc-image-banner">
+                      <img 
+                        src={course.image || course.course_image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60'} 
+                        alt={course.title} 
+                        onError={(e) => {
+                          e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60';
+                        }}
+                      />
+                      <div className="ccc-banner-overlay">
+                        <span style={{ background: 'rgba(15, 23, 42, 0.85)', color: '#38bdf8', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, backdropFilter: 'blur(8px)', border: '1px solid rgba(56, 189, 248, 0.3)', textTransform: 'uppercase' }}>
+                          {course.category}
+                        </span>
                       </div>
                     </div>
-                    <div className="lsi-right">
-                      <span className={`lsi-status-badge ${session.isLive ? 'badge-live' : 'badge-scheduled'}`}>
-                        {session.status}
-                      </span>
+
+                    {/* Course Card Body */}
+                    <div className="ccc-body-content">
+                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', lineHeight: 1.4 }}>{course.title}</h4>
+                      <div className="ccc-progress-wrap">
+                        <div className="ccc-bar-bg" style={{ height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div className="ccc-bar-fill" style={{ width: `${course.progress}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb 0%, #10b981 100%)', borderRadius: '4px', transition: 'width 0.4s ease' }}></div>
+                        </div>
+                        <div className="ccc-meta-info" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                          <span>🎬 {course.lessons}</span>
+                          <strong style={{ color: '#2563eb', fontWeight: 700 }}>{course.progress}% Completed</strong>
+                        </div>
+                      </div>
                       <button 
-                        className={`btn-session-action ${session.isLive ? 'btn-live-join' : 'btn-live-remind'}`}
-                        onClick={() => triggerToast(session.isLive ? `🎥 Joining live stream for ${session.title}` : `🔔 Reminder set for ${session.title}`)}
+                        className="btn-ccc-action"
+                        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#38bdf8', border: '1px solid #334155', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        onClick={() => {
+                          setActiveCourse(course);
+                          setCurrentVideoIndex(course.completedVideos || 0);
+                          setActiveQuizModal(null);
+                          setQuizAnswers({});
+                          setQuizResult(null);
+                        }}
                       >
-                        {session.isLive ? '▶ Join Stream' : '🔔 Add Reminder'}
+                        {course.progress === 100 ? '🚀 Review Course Workspace ✓' : '🚀 Open Course Workspace →'}
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : activeTab === 'Assignments' ? (
-            <div className="db-tab-content-container">
-              <div className="tab-header-row">
-                <h3>Assignments & Quizzes</h3>
-                <button className="widget-view-all" onClick={() => triggerToast('📤 Opening Assignment Upload Dialog...')}>Upload New Assignment</button>
-              </div>
-              <div className="assignments-table-container">
-                <table className="custom-dashboard-table">
-                  <thead>
-                    <tr>
-                      <th>Assignment Title</th>
-                      <th>Course</th>
-                      <th>Deadline</th>
-                      <th>Status</th>
-                      <th>Grade / Score</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { id: 1, title: 'Python List Comprehension & Dicts', course: 'Python Programming', deadline: 'May 26, 2024', status: 'Submitted', score: '95 / 100', color: '#16a34a' },
-                      { id: 2, title: 'Circuit Schematic for Temperature Sensor', course: 'PCB Design & Schematics', deadline: 'May 29, 2024', status: 'Pending Upload', score: 'Pending', color: '#d97706' },
-                      { id: 3, title: 'ESP32 MQTT Publish & Subscribe Lab', course: 'IoT Systems & Sensors', deadline: 'Jun 02, 2024', status: 'In Review', score: 'Processing', color: '#2563eb' }
-                    ].map(item => (
-                      <tr key={item.id}>
-                        <td><strong>{item.title}</strong></td>
-                        <td>{item.course}</td>
-                        <td>{item.deadline}</td>
-                        <td><span className="tbl-status-tag" style={{ color: item.color, background: `${item.color}15` }}>{item.status}</span></td>
-                        <td><strong>{item.score}</strong></td>
-                        <td>
-                          <button 
-                            className="tbl-btn-action"
-                            onClick={() => triggerToast(`📄 Opening submission report for "${item.title}"`)}
+
+              {/* ACTIVE COURSE LEARNING WORKSPACE MODAL */}
+              {activeCourse && (
+                <div className="admin-modal-overlay" onClick={() => setActiveCourse(null)} style={{ zIndex: 1000 }}>
+                  <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '940px', width: '92%', background: '#0f172a', color: '#f8fafc', borderRadius: '16px', border: '1px solid #1e293b', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.6)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #1e293b', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '24px' }}>🎓</span>
+                        <h3 style={{ fontSize: '18px', fontWeight: 800, background: 'linear-gradient(90deg, #38bdf8, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+                          {activeCourse.title}
+                        </h3>
+                      </div>
+                      <button 
+                        onClick={() => setActiveCourse(null)}
+                        style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Overall Course Progress Header */}
+                    <div style={{ marginBottom: '18px', background: '#1e293b', padding: '14px', borderRadius: '10px', border: '1px solid #334155' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, color: '#94a3b8', marginBottom: '8px' }}>
+                        <span style={{ color: '#e2e8f0' }}>⚡ Course Completion Progress</span>
+                        <span style={{ color: '#38bdf8', fontWeight: 800 }}>{activeCourse.progress}% Mastered</span>
+                      </div>
+                      <div style={{ height: '8px', background: '#0f172a', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ width: `${activeCourse.progress}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb, #10b981)', borderRadius: '4px', transition: 'width 0.4s ease' }}></div>
+                      </div>
+                    </div>
+
+                    <div className="db-workspace-grid">
+                      {/* Video Player & PPT Area */}
+                      <div>
+                        <div style={{ background: '#1e293b', color: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 8px 20px rgba(0,0,0,0.3)' }}>
+                          <video
+                            id="studentCourseVideoPlayer"
+                            controls
+                            autoPlay
+                            key={`${activeCourse.id}_vid_${currentVideoIndex}`}
+                            poster="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80"
+                            style={{ width: '100%', height: '240px', borderRadius: '8px', background: '#000', objectFit: 'contain', border: '1px solid #334155' }}
+                            onTimeUpdate={(e) => {
+                              if (e.target.duration > 0) {
+                                const pct = Math.floor((e.target.currentTime / e.target.duration) * 100);
+                                setVideoWatchProgress(pct);
+
+                                // Auto mark completed in checklist & course progress when 75% reached!
+                                if (pct >= 75 && currentVideoIndex >= activeCourse.completedVideos) {
+                                  const newComp = currentVideoIndex + 1;
+                                  const newProgress = Math.min(100, Math.round((newComp / 12) * 100));
+                                  const updatedCourse = {
+                                    ...activeCourse,
+                                    completedVideos: newComp,
+                                    progress: newProgress
+                                  };
+                                  setActiveCourse(updatedCourse);
+                                  setAllCoursesData(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+                                  sendProgressUpdate(updatedCourse.course_unique_code, newProgress, newProgress === 100);
+                                }
+                              }
+                            }}
+                            onEnded={() => {
+                              setVideoWatchProgress(100);
+                            }}
+                            onError={(e) => {
+                              e.target.src = "https://vjs.zencdn.net/v/oceans.mp4";
+                              e.target.play().catch(() => {});
+                            }}
+                            src={
+                              (() => {
+                                const currentVid = activeCourse.videos?.[currentVideoIndex];
+                                if (currentVid && typeof currentVid === 'string') {
+                                  if (currentVid.startsWith('http') || currentVid.startsWith('data:video') || currentVid.startsWith('/courses/') || currentVid.startsWith('/api/')) {
+                                    return currentVid;
+                                  }
+                                }
+                                const sampleStreams = [
+                                  "https://vjs.zencdn.net/v/oceans.mp4",
+                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                                  "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
+                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+                                  "https://www.w3schools.com/html/mov_bbb.mp4",
+                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+                                ];
+                                return sampleStreams[currentVideoIndex % sampleStreams.length];
+                              })()
+                            }
                           >
-                            View Submission
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            Your browser does not support HTML5 video.
+                          </video>
+
+                          <div className="db-flex-responsive">
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                <h4 style={{ margin: 0, fontSize: '14px', color: '#38bdf8', fontWeight: 700 }}>
+                                  Module #{currentVideoIndex + 1} Video Stream
+                                </h4>
+                                <span 
+                                  title={videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? "75%+ Watched (Lesson Unlocked)" : `Watch Progress: ${videoWatchProgress}% (75% Required)`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? 'rgba(16, 185, 129, 0.15)' : 'rgba(249, 115, 22, 0.15)',
+                                    color: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#4ade80' : '#fb923c',
+                                    padding: '3px 9px',
+                                    borderRadius: '12px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    border: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '1px solid rgba(74, 222, 128, 0.4)' : '1px solid rgba(251, 146, 60, 0.4)'
+                                  }}
+                                >
+                                  <span style={{
+                                    width: '9px',
+                                    height: '9px',
+                                    borderRadius: '50%',
+                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#4ade80' : '#fb923c',
+                                    boxShadow: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '0 0 10px #4ade80' : '0 0 10px #fb923c'
+                                  }}></span>
+                                  {currentVideoIndex < activeCourse.completedVideos || videoWatchProgress >= 75 ? 'Ready' : `${videoWatchProgress}%`}
+                                </span>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
+                                {(activeCourse.videos && activeCourse.videos[currentVideoIndex] && !activeCourse.videos[currentVideoIndex].startsWith('data:')) ? activeCourse.videos[currentVideoIndex] : `Lesson Video ${currentVideoIndex + 1}`}
+                              </p>
+                            </div>
+
+                            <button 
+                              style={{ background: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : '#334155', color: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '#fff' : '#94a3b8', border: 'none', padding: '9px 18px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', boxShadow: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '0 4px 14px rgba(37, 99, 235, 0.4)' : 'none' }}
+                              onClick={() => {
+                                // Enforce 75% video watching rule for uncompleted videos
+                                if (currentVideoIndex >= activeCourse.completedVideos && videoWatchProgress < 75) {
+                                  triggerToast(`⚠️ Please watch at least 75% of Video #${currentVideoIndex + 1} to complete! (Current: ${videoWatchProgress}%)`, 'error');
+                                  return;
+                                }
+
+                                const nextVid = currentVideoIndex + 1;
+                                if (nextVid === 6 && !activeCourse.midQuizPassed) {
+                                  setActiveQuizModal('mid');
+                                  triggerToast('📝 You have reached Video 6! Please pass the Mid-Course Quiz to unlock Video 7.');
+                                  return;
+                                }
+                                if (nextVid === 12 && !activeCourse.finalQuizPassed) {
+                                  setActiveQuizModal('final');
+                                  triggerToast('🏆 You have finished all 12 Videos! Complete the Final Quiz for Certification.');
+                                  return;
+                                }
+
+                                const newComp = Math.max(activeCourse.completedVideos, nextVid);
+                                const newProgress = Math.min(100, Math.round((newComp / 12) * 100));
+                                const updatedCourse = {
+                                  ...activeCourse,
+                                  completedVideos: newComp,
+                                  progress: newProgress
+                                };
+                                setActiveCourse(updatedCourse);
+                                setAllCoursesData(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+                                sendProgressUpdate(updatedCourse.course_unique_code, newProgress, newProgress === 100);
+
+                                setVideoWatchProgress(0);
+                                if (nextVid < 12) {
+                                  setCurrentVideoIndex(nextVid);
+                                  triggerToast(`▶ Completed Video ${currentVideoIndex + 1}. Playing Video ${nextVid + 1}`);
+                                } else {
+                                  triggerToast('🎉 All videos completed!');
+                                }
+                              }}
+                            >
+                              Mark Video {currentVideoIndex + 1} Completed & Next →
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* PPT Download for Current Module */}
+                        <div className="db-flex-responsive" style={{ marginTop: '16px', background: '#1e293b', padding: '14px', borderRadius: '10px', border: '1px solid #334155' }}>
+                          <div>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8' }}>📊 Module #{currentVideoIndex + 1} Presentation Deck</span>
+                            <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
+                              {(activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `Module_${currentVideoIndex + 1}_Slides.pptx`}
+                            </p>
+                          </div>
+                          <div>
+                            <button 
+                              style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                              onClick={() => {
+                                const pptData = activeCourse.ppts[currentVideoIndex];
+                                const pptName = (activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `${activeCourse.title}_Module_${currentVideoIndex + 1}.pptx`;
+                                handleDownloadPPT(activeCourse.title, currentVideoIndex, pptData, pptName);
+                                triggerToast(`📥 Successfully downloaded PPT Presentation #${currentVideoIndex + 1}!`);
+                              }}
+                            >
+                              📥 Download PPT Presentation
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Video & Quiz Navigation Sidebar */}
+                      <div style={{ height: '330px', overflowY: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '12px' }}>
+                        <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#38bdf8', fontWeight: 700 }}>12 Module Checklist</h4>
+                        {Array.from({ length: 12 }).map((_, idx) => {
+                          const isLocked = idx > 6 && !activeCourse.midQuizPassed;
+                          const isCurrent = idx === currentVideoIndex;
+                          const isDone = idx < activeCourse.completedVideos || (isCurrent && videoWatchProgress >= 75);
+
+                          return (
+                            <div key={idx}>
+                              <button
+                                style={{
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  padding: '9px 12px',
+                                  marginBottom: '6px',
+                                  borderRadius: '8px',
+                                  border: isDone ? '1px solid #10b981' : isCurrent ? '1px solid #38bdf8' : '1px solid transparent',
+                                  fontSize: '12px',
+                                  cursor: isLocked ? 'not-allowed' : 'pointer',
+                                  background: isDone ? 'rgba(16, 185, 129, 0.15)' : isCurrent ? 'rgba(56, 189, 248, 0.15)' : '#0f172a',
+                                  color: isDone ? '#4ade80' : isCurrent ? '#38bdf8' : isLocked ? '#64748b' : '#cbd5e1',
+                                  fontWeight: (isDone || isCurrent) ? 700 : 500,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between'
+                                }}
+                                disabled={isLocked}
+                                onClick={() => {
+                                  setCurrentVideoIndex(idx);
+                                  if (idx < activeCourse.completedVideos) {
+                                    setVideoWatchProgress(100);
+                                  } else {
+                                    setVideoWatchProgress(0);
+                                  }
+                                  triggerToast(`▶ Now playing Video #${idx + 1}`);
+                                }}
+                              >
+                                <span>{isDone ? `✓ Video #${idx + 1}` : isCurrent ? `▶ Playing Video #${idx + 1}` : `Video #${idx + 1}`}</span>
+                                {isLocked && <span style={{ fontSize: '10px', color: '#64748b' }}>🔒 Locked</span>}
+                              </button>
+
+                              {/* Mid-Course Quiz Trigger Box */}
+                              {idx === 5 && (
+                                <button
+                                  style={{
+                                    width: '100%',
+                                    margin: '4px 0 8px 0',
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: activeCourse.midQuizPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                                    color: activeCourse.midQuizPassed ? '#4ade80' : '#facc15',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  onClick={() => {
+                                    setActiveQuizModal('mid');
+                                    setQuizAnswers({});
+                                    setQuizResult(null);
+                                    setIsRetakingQuiz(false);
+                                  }}
+                                >
+                                  📝 {activeCourse.midQuizPassed ? '✓ Mid Quiz Passed' : 'Take Mid-Course Quiz (Req.)'}
+                                </button>
+                              )}
+
+                              {/* Final Quiz Trigger Button after Video 12 */}
+                              {idx === 11 && (
+                                <button
+                                  style={{
+                                    width: '100%',
+                                    margin: '4px 0 8px 0',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: activeCourse.finalQuizPassed ? '#dcfce7' : '#ede9fe',
+                                    color: activeCourse.finalQuizPassed ? '#166534' : '#5b21b6',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  onClick={() => {
+                                    setActiveQuizModal('final');
+                                    setQuizAnswers({});
+                                    setQuizResult(null);
+                                    setIsRetakingQuiz(false);
+                                  }}
+                                >
+                                  🏆 {activeCourse.finalQuizPassed ? '✓ Final Quiz Passed' : 'Take Final Assessment Quiz'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 25 QUESTIONS FORMATTED QUIZ PAPER MODAL (25 MARKS TOTAL) */}
+              {activeQuizModal && (
+                <div className="admin-modal-overlay" onClick={() => setActiveQuizModal(null)}>
+                  <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '750px', maxHeight: '85vh', overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                        {activeQuizModal === 'mid' ? '📝 Mid-Course Examination Paper (After Video 6)' : '🏆 Final Assessment Examination Paper (After Video 12)'}
+                      </h3>
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+                        25 Questions • 25 Marks Total
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+                      Each question carries 1 Mark. Minimum passing score is 13 / 25 Marks (50%).
+                    </p>
+
+                    {/* Previously Passed Quiz Score Banner & Retake Trigger */}
+                    {((activeQuizModal === 'mid' && activeCourse.midQuizPassed) || (activeQuizModal === 'final' && activeCourse.finalQuizPassed)) && (
+                      <div style={{ padding: '12px 16px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#15803d', borderRadius: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: 700 }}>🏆 Previously Submitted High Score & Result</span>
+                          <div style={{ fontSize: '12px', marginTop: '2px', color: '#166534' }}>
+                            Highest Score: <strong>{activeQuizModal === 'mid' ? (activeCourse.midQuizScore || 24) : (activeCourse.finalQuizScore || 25)} / 25 Marks</strong> ({Math.round(((activeQuizModal === 'mid' ? (activeCourse.midQuizScore || 24) : (activeCourse.finalQuizScore || 25)) / 25) * 100)}%) • Passed ✓
+                          </div>
+                        </div>
+                        <button
+                          style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          onClick={() => {
+                            setIsRetakingQuiz(true);
+                            setQuizAnswers({});
+                            setQuizResult(null);
+                            triggerToast('🔄 Retake mode enabled! Choose your new answers below.');
+                          }}
+                        >
+                          🔄 Retake Quiz / Try Again
+                        </button>
+                      </div>
+                    )}
+
+                    {(() => {
+                      const quizObj = activeQuizModal === 'mid' ? activeCourse.midQuiz : activeCourse.finalQuiz;
+                      const qList = (quizObj && quizObj.questions && quizObj.questions.length >= 25)
+                        ? quizObj.questions
+                        : generateQuizQuestionsForCourse(activeCourse.title, activeQuizModal);
+                      const isReviewingPassedQuiz = ((activeQuizModal === 'mid' && activeCourse.midQuizPassed) || (activeQuizModal === 'final' && activeCourse.finalQuizPassed)) && !isRetakingQuiz;
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+                          {qList.map((q, qIdx) => {
+                            const correctOptIndex = q.correctAnswer ?? (qIdx % 4);
+
+                            return (
+                              <div key={qIdx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px' }}>
+                                <div style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '8px' }}>
+                                  Q{qIdx + 1}. {q.question} <span style={{ float: 'right', fontSize: '11px', color: '#64748b', fontWeight: 500 }}>(1 Mark)</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                  {q.options.map((opt, optIdx) => {
+                                    const isCorrect = isReviewingPassedQuiz && optIdx === correctOptIndex;
+                                    const isSelected = isReviewingPassedQuiz ? isCorrect : (quizAnswers[qIdx] === optIdx);
+
+                                    return (
+                                      <label 
+                                        key={optIdx} 
+                                        style={{ 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'space-between',
+                                          gap: '8px', 
+                                          fontSize: '12px', 
+                                          background: isCorrect ? '#dcfce7' : '#ffffff', 
+                                          border: isCorrect ? '1.5px solid #22c55e' : '1px solid #cbd5e1', 
+                                          color: isCorrect ? '#15803d' : '#334155',
+                                          fontWeight: isCorrect ? 700 : 400,
+                                          padding: '8px 10px', 
+                                          borderRadius: '6px', 
+                                          cursor: isReviewingPassedQuiz ? 'default' : 'pointer' 
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <input 
+                                            type="radio" 
+                                            name={`q_${qIdx}`} 
+                                            disabled={isReviewingPassedQuiz}
+                                            checked={isSelected}
+                                            onChange={() => {
+                                              if (!isReviewingPassedQuiz) {
+                                                setQuizAnswers({ ...quizAnswers, [qIdx]: optIdx });
+                                              }
+                                            }}
+                                          />
+                                          <span>{opt}</span>
+                                        </div>
+                                        {isCorrect && <span style={{ fontSize: '10px', background: '#166534', color: '#fff', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>✓ Correct Answer</span>}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
+                    {quizResult && (
+                      <div style={{ padding: '14px', background: quizResult.passed ? '#f0fdf4' : '#fef2f2', border: `1px solid ${quizResult.passed ? '#bbf7d0' : '#fecaca'}`, color: quizResult.passed ? '#15803d' : '#b91c1c', borderRadius: '8px', marginBottom: '15px', fontWeight: 600, fontSize: '13px' }}>
+                        <div>{quizResult.msg}</div>
+                        <div style={{ fontSize: '13px', marginTop: '6px' }}>
+                          Evaluated Score: <strong>{quizResult.score} / 25 Marks</strong> ({Math.round((quizResult.score / 25) * 100)}%)
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', sticky: 'bottom', background: '#fff', paddingTop: '10px' }}>
+                      <button 
+                        style={{ background: '#cbd5e1', color: '#334155', border: 'none', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                        onClick={() => setActiveQuizModal(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        style={{ background: 'var(--primary-red)', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}
+                        onClick={() => {
+                          const quizObj = activeQuizModal === 'mid' ? activeCourse.midQuiz : activeCourse.finalQuiz;
+                          const qList = (quizObj && quizObj.questions && quizObj.questions.length >= 25)
+                            ? quizObj.questions
+                            : Array.from({ length: 25 }).map((_, idx) => ({ correctAnswer: idx % 4 }));
+
+                          let totalScore = 0;
+                          qList.forEach((q, idx) => {
+                            if (quizAnswers[idx] === (q.correctAnswer ?? (idx % 4))) {
+                              totalScore += 1;
+                            }
+                          });
+
+                          const prevScore = activeQuizModal === 'mid' ? (activeCourse.midQuizScore || 0) : (activeCourse.finalQuizScore || 0);
+                          const newHighScore = Math.max(prevScore, totalScore);
+
+                          setQuizResult({ passed: true, score: totalScore, msg: `✓ Quiz Submitted! Marks Scored: ${totalScore}/25 Marks. (Highest Record: ${newHighScore}/25)` });
+                          setIsRetakingQuiz(false);
+                          
+                          if (activeQuizModal === 'mid') {
+                            const updated = { 
+                              ...activeCourse, 
+                              midQuizPassed: true,
+                              midQuizScore: newHighScore,
+                              completedVideos: Math.max(activeCourse.completedVideos, 6) 
+                            };
+                            setActiveCourse(updated);
+                            setAllCoursesData(prev => prev.map(c => c.id === updated.id ? updated : c));
+                            sendProgressUpdate(updated.course_unique_code, updated.progress, false, {
+                              midQuizPassed: true,
+                              midQuizScore: newHighScore,
+                              completedVideos: Math.max(activeCourse.completedVideos, 6),
+                              total_score: `${newHighScore}/25`
+                            });
+                            setCurrentVideoIndex(6); // Instantly set player to Video 7
+                            setActiveQuizModal(null);
+                            triggerToast(`⚡ Mid Quiz Completed (${totalScore}/25 Marks)! High Score: ${newHighScore}/25. Unlocked & Playing Video 7 ▶`);
+                          } else {
+                            const updated = { 
+                              ...activeCourse, 
+                              finalQuizPassed: true,
+                              finalQuizScore: newHighScore,
+                              progress: 100, 
+                              completedVideos: 12 
+                            };
+                            setActiveCourse(updated);
+                            setAllCoursesData(prev => prev.map(c => c.id === updated.id ? updated : c));
+                            sendProgressUpdate(updated.course_unique_code, 100, true, {
+                              finalQuizPassed: true,
+                              finalQuizScore: newHighScore,
+                              completedVideos: 12,
+                              assessment_status: 'true',
+                              certificate_issued: 'true',
+                              total_score: `${newHighScore}/25`
+                            });
+                            setActiveQuizModal(null);
+                            setActiveCourse(null);
+                            setActiveTab('Certificates'); // Instantly navigate to generated Certificate tab
+                            triggerToast(`🎓 Final Assessment Completed (${totalScore}/25 Marks)! High Score: ${newHighScore}/25. Certificate Generated & Unlocked!`);
+                          }
+                        }}
+                      >
+                        Submit & Evaluate 25 Questions Paper
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ORIGINAL PPT DOCUMENT PRESENTATION VIEWER MODAL */}
+              {activePptViewerModal && (
+                <div className="admin-modal-overlay" onClick={() => setActivePptViewerModal(null)} style={{ zIndex: 1100 }}>
+                  <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '950px', background: '#0f172a', color: '#fff', borderRadius: '14px', border: '1px solid #1e293b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '20px' }}>📊</span>
+                        <h3 style={{ margin: 0, fontSize: '17px', color: '#38bdf8', fontWeight: 700 }}>{activePptViewerModal.title}</h3>
+                      </div>
+                      <button onClick={() => setActivePptViewerModal(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '22px', cursor: 'pointer' }}>✕</button>
+                    </div>
+
+                    {/* Original Document Presentation Viewer Container */}
+                    <div style={{ width: '100%', height: '480px', borderRadius: '10px', overflow: 'hidden', background: '#1e293b', border: '1px solid #334155', position: 'relative' }}>
+                      {(() => {
+                        const rawUrl = activePptViewerModal.data || '';
+                        if (!rawUrl) {
+                          return (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', padding: '20px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '48px', marginBottom: '10px' }}>📄</div>
+                              <h4 style={{ color: '#f8fafc', margin: '0 0 8px 0' }}>{activePptViewerModal.name || 'Module Presentation Deck.pptx'}</h4>
+                              <p style={{ fontSize: '13px', maxWidth: '480px' }}>Uploaded PowerPoint presentation file is ready for download and student learning.</p>
+                            </div>
+                          );
+                        }
+
+                        if (rawUrl.startsWith('data:')) {
+                          return (
+                            <object
+                              data={rawUrl}
+                              type="application/pdf"
+                              style={{ width: '100%', height: '100%', border: 'none' }}
+                            >
+                              <iframe
+                                src={rawUrl}
+                                title="Original Document Preview"
+                                style={{ width: '100%', height: '100%', border: 'none' }}
+                              />
+                            </object>
+                          );
+                        }
+
+                        const fullDocUrl = rawUrl.startsWith('http') ? rawUrl : `${window.location.origin}${rawUrl}`;
+                        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fullDocUrl)}`;
+                        const googleViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fullDocUrl)}&embedded=true`;
+
+                        return (
+                          <iframe
+                            src={officeViewerUrl}
+                            title="Original PowerPoint Presentation Viewer"
+                            style={{ width: '100%', height: '100%', border: 'none', background: '#ffffff' }}
+                            onError={(e) => {
+                              e.target.src = googleViewerUrl;
+                            }}
+                          />
+                        );
+                      })()}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Student Original Presentation Reader</span>
+                      <button
+                        onClick={() => {
+                          const pptData = activePptViewerModal.data;
+                          const pptName = activePptViewerModal.name;
+                          handleDownloadPPT(activeCourse.title, activePptViewerModal.moduleIndex - 1, pptData, pptName);
+                          triggerToast(`📥 Successfully downloaded PPT Presentation #${activePptViewerModal.moduleIndex}!`);
+                        }}
+                        style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        📥 Download Original PPT (.pptx)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+
           ) : activeTab === 'Exams' ? (
             <div className="db-tab-content-container">
               <div className="tab-header-row">
-                <h3>Semester & Certification Examinations</h3>
+                <h3>Semester & Skill Assessment Examinations</h3>
               </div>
               <div className="exams-cards-grid">
-                {[
-                  { id: 1, title: 'Mid-Term Assessment: Embedded C & ARM', date: 'May 30, 2024', duration: '90 Minutes', marks: '100 Marks', status: 'Admit Card Ready' },
-                  { id: 2, title: 'Naan Mudhalvan Skill Assessment Exam', date: 'June 05, 2024', duration: '120 Minutes', marks: '150 Marks', status: 'Scheduled' }
-                ].map(exam => (
-                  <div key={exam.id} className="exam-card-item">
-                    <div className="eci-header">
-                      <ShieldCheck size={28} color="var(--primary-red)" />
-                      <div>
-                        <h4>{exam.title}</h4>
-                        <span className="eci-date-chip">📅 Date: {exam.date}</span>
-                      </div>
-                    </div>
-                    <div className="eci-details-row">
-                      <div><span>Duration:</span> <strong>{exam.duration}</strong></div>
-                      <div><span>Total Marks:</span> <strong>{exam.marks}</strong></div>
-                      <div><span>Status:</span> <strong style={{ color: '#16a34a' }}>{exam.status}</strong></div>
-                    </div>
-                    <button 
-                      className="btn-exam-admit"
-                      onClick={() => triggerToast(`📥 Downloading Admit Card PDF for ${exam.title}...`)}
-                    >
-                      Download Hall Ticket / Admit Card
-                    </button>
-                  </div>
-                ))}
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280', background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', gridColumn: 'span 2' }}>
+                  <ShieldCheck size={36} color="#9ca3af" style={{ marginBottom: '10px' }} />
+                  <h4>No Examinations Scheduled</h4>
+                  <p>Examination timetables and hall tickets will appear here once announced by your department.</p>
+                </div>
               </div>
             </div>
           ) : activeTab === 'Certificates' ? (
@@ -620,100 +1473,11 @@ export default function Dashboard() {
                 <h3>My Earned Certificates</h3>
               </div>
               <div className="certificates-cards-grid">
-                {[
-                  { id: 1, title: 'Certificate of Excellence: Surface Modelling', issuedDate: 'April 15, 2024', certId: 'SM-NM-2024-8841', issuer: 'The SM Groups & Naan Mudhalvan' },
-                  { id: 2, title: 'Certificate of Completion: Data Structures', issuedDate: 'March 10, 2024', certId: 'SM-NM-2024-3312', issuer: 'Sona College of Technology' }
-                ].map(cert => (
-                  <div key={cert.id} className="certificate-item-card">
-                    <div className="cert-badge-wrap">
-                      <Award size={36} color="#D97706" />
-                    </div>
-                    <h4>{cert.title}</h4>
-                    <p className="cert-meta">Verified ID: <strong>{cert.certId}</strong></p>
-                    <p className="cert-meta">Issued on {cert.issuedDate} by {cert.issuer}</p>
-                    <div className="cert-actions-row">
-                      <button 
-                        className="btn-cert-download"
-                        onClick={() => triggerToast(`📥 Verified Certificate ${cert.certId} downloaded!`)}
-                      >
-                        📥 Download PDF
-                      </button>
-                      <button 
-                        className="btn-cert-share"
-                        onClick={() => triggerToast(`🔗 Verification link for ${cert.certId} copied to clipboard!`)}
-                      >
-                        🔗 Share Certificate
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : activeTab === 'Study Materials' ? (
-            <div className="db-tab-content-container">
-              <div className="tab-header-row">
-                <h3>Downloadable Study Materials & Lab Notes</h3>
-              </div>
-              <div className="materials-list">
-                {[
-                  { id: 1, name: 'Python Complete Lecture Notes & Code Snippets.pdf', size: '14.2 MB', type: 'PDF Document', category: 'Software' },
-                  { id: 2, name: 'PCB Schematic Symbol Libraries & Layout Rules.zip', size: '28.5 MB', type: 'ZIP Archive', category: 'Hardware' },
-                  { id: 3, name: 'IoT Microcontroller Pins Reference Manual.pdf', size: '8.4 MB', type: 'PDF Document', category: 'IoT' }
-                ].map(mat => (
-                  <div key={mat.id} className="material-item">
-                    <div className="mat-icon-box">
-                      <FolderOpen size={24} color="var(--primary-red)" />
-                    </div>
-                    <div className="mat-details">
-                      <h4>{mat.name}</h4>
-                      <p>{mat.type} • {mat.size} • Category: <strong>{mat.category}</strong></p>
-                    </div>
-                    <button 
-                      className="btn-mat-download"
-                      onClick={() => triggerToast(`📥 Downloading "${mat.name}"...`)}
-                    >
-                      📥 Download
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : activeTab === 'Leaderboard' ? (
-            <div className="db-tab-content-container">
-              <div className="tab-header-row">
-                <h3>Naan Mudhalvan Student Leaderboard</h3>
-                <span className="user-rank-highlight">🏆 Your Rank: #14 (1,250 Points)</span>
-              </div>
-              <div className="leaderboard-table-container">
-                <table className="custom-dashboard-table">
-                  <thead>
-                    <tr>
-                      <th>Rank</th>
-                      <th>Student Name</th>
-                      <th>College</th>
-                      <th>Department</th>
-                      <th>Reward Points</th>
-                      <th>Badges Earned</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { rank: '1 🥇', name: 'Kavitha R', college: 'GCE Salem', dept: 'ECE', points: '2,840', badges: '🏆 Master Coder' },
-                      { rank: '2 🥈', name: 'Vignesh M', college: 'Sona College of Tech', dept: 'IT', points: '2,610', badges: '⚡ Hardware Pro' },
-                      { rank: '3 🥉', name: 'Priya S', college: 'PSG College of Tech', dept: 'CSE', points: '2,450', badges: '💡 Innovator' },
-                      { rank: '14 ⭐', name: `${user.fullName || 'You'}`, college: `${user.college || 'Sona College'}`, dept: `${user.department || 'IT'}`, points: '1,250', badges: '🚀 Rising Star' }
-                    ].map((row, idx) => (
-                      <tr key={idx} className={row.name.includes(user.fullName || 'You') ? 'user-highlight-row' : ''}>
-                        <td><strong>{row.rank}</strong></td>
-                        <td><strong>{row.name}</strong></td>
-                        <td>{row.college}</td>
-                        <td>{row.dept}</td>
-                        <td><strong style={{ color: 'var(--primary-red)' }}>{row.points} pts</strong></td>
-                        <td>{row.badges}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280', background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', gridColumn: 'span 2' }}>
+                  <Award size={36} color="#9ca3af" style={{ marginBottom: '10px' }} />
+                  <h4>No Certificates Issued Yet</h4>
+                  <p>Complete your enrolled courses to earn verified digital certificates.</p>
+                </div>
               </div>
             </div>
           ) : activeTab === 'Messages' || activeTab === 'Calendar' ? (
@@ -725,26 +1489,23 @@ export default function Dashboard() {
                 {activeTab === 'Messages' ? (
                   <div>
                     <h4 style={{ marginBottom: '15px' }}>💬 Recent Messages & Support Notifications</h4>
-                    <div style={{ borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '12px' }}>
-                      <strong>Mentor Mr. Dinesh Kumar:</strong>
-                      <p style={{ color: '#666', fontSize: '14px' }}>Please ensure your Python assignment is submitted before May 26th.</p>
-                    </div>
-                    <div style={{ borderBottom: '1px solid #eee', paddingBottom: '12px' }}>
-                      <strong>Naan Mudhalvan Support:</strong>
-                      <p style={{ color: '#666', fontSize: '14px' }}>Your enrollment in IoT Systems Workshop has been confirmed!</p>
+                    <div style={{ padding: '30px', textAlign: 'center', color: '#6b7280' }}>
+                      <MessageSquare size={36} color="#9ca3af" style={{ marginBottom: '10px' }} />
+                      <p>No new messages or support notifications.</p>
                     </div>
                   </div>
                 ) : (
                   <div>
                     <h4 style={{ marginBottom: '15px' }}>📅 Upcoming Schedule Calendar</h4>
-                    <p style={{ fontSize: '14px', color: '#444' }}>• May 24: Live Class — Data Structures Using Python (10:00 AM)</p>
-                    <p style={{ fontSize: '14px', color: '#444', marginTop: '8px' }}>• May 26: Deadline — Python List Comprehension Assignment</p>
-                    <p style={{ fontSize: '14px', color: '#444', marginTop: '8px' }}>• May 30: Mid-Term Assessment Exam</p>
+                    <div style={{ padding: '30px', textAlign: 'center', color: '#6b7280' }}>
+                      <Calendar size={36} color="#9ca3af" style={{ marginBottom: '10px' }} />
+                      <p>No events or exam schedules posted yet.</p>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
-          ) : activeTab === 'Profile' || activeTab === 'Settings' ? (
+          ) : activeTab === 'Profile' ? (
             <div style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', padding: '30px', borderRadius: '16px', boxShadow: 'var(--shadow-md)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #e5e7eb', paddingBottom: '15px' }}>
                 <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#111827' }}>Student Profile & Details</h3>
@@ -766,6 +1527,34 @@ export default function Dashboard() {
 
               {isEditingProfile ? (
                 <form onSubmit={handleSaveProfile} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  {/* Profile Image Edit */}
+                  <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '20px', background: '#f9fafb', padding: '16px', borderRadius: '12px' }}>
+                    {profileForm.profileImage ? (
+                      <img src={profileForm.profileImage} alt="Profile" style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary-red)' }} />
+                    ) : (
+                      <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: 'var(--primary-red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', fontWeight: 700 }}>
+                        {(profileForm.fullName || 'S').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Profile Photo</label>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleImageChange}
+                        style={{ fontSize: '13px' }}
+                      />
+                      {profileForm.profileImage && (
+                        <button 
+                          type="button"
+                          onClick={() => setProfileForm(prev => ({ ...prev, profileImage: '' }))}
+                          style={{ marginLeft: '10px', background: '#ef4444', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+                        >
+                          Remove Photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <div style={{ gridColumn: 'span 2' }}>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Full Name</label>
                     <input 
@@ -866,35 +1655,54 @@ export default function Dashboard() {
                   </div>
                 </form>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                  <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>FULL NAME</span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>{user.fullName || 'Not provided'}</strong>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px', background: '#f9fafb', padding: '20px', borderRadius: '14px' }}>
+                    {user.profileImage ? (
+                      <img src={user.profileImage} alt="Profile" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--primary-red)' }} />
+                    ) : (
+                      <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--primary-red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 700 }}>
+                        {(user.fullName || 'S').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <h4 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', margin: 0 }}>{user.fullName || 'Student Name'}</h4>
+                      <p style={{ color: '#6b7280', fontSize: '14px', margin: '4px 0 0 0' }}>{user.email || ''}</p>
+                      <span style={{ display: 'inline-block', marginTop: '6px', background: '#fee2e2', color: '#991b1b', fontSize: '12px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>
+                        {user.role === 'admin' ? 'Administrator' : 'Student Account'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>EMAIL ADDRESS</span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>{user.email || 'Not provided'}</strong>
-                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>FULL NAME</span>
+                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.fullName || 'Not provided'}</strong>
+                    </div>
 
-                  <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>PHONE NUMBER</span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>{user.phone || 'Not provided'}</strong>
-                  </div>
+                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>EMAIL ADDRESS</span>
+                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.email || 'Not provided'}</strong>
+                    </div>
 
-                  <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>GENDER</span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>{user.gender || 'Not provided'}</strong>
-                  </div>
+                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>PHONE NUMBER</span>
+                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.phone || 'Not provided'}</strong>
+                    </div>
 
-                  <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>COLLEGE</span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>{user.college || 'Not provided'}</strong>
-                  </div>
+                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>GENDER</span>
+                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.gender || 'Not provided'}</strong>
+                    </div>
 
-                  <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>DEPARTMENT & YEAR</span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>{user.department || 'Not provided'} {user.year ? `(${user.year})` : ''}</strong>
+                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>COLLEGE</span>
+                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.college || 'Not provided'}</strong>
+                    </div>
+
+                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>DEPARTMENT & YEAR</span>
+                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.department || 'Not provided'} {user.year ? `(${user.year})` : ''}</strong>
+                    </div>
                   </div>
                 </div>
               )}

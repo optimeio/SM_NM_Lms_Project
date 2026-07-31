@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Eye, EyeOff } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { Link, useNavigate } from 'react-router-dom';
@@ -7,6 +8,8 @@ import '../styles/Auth.css';
 
 export default function Register() {
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     gender: '',
@@ -189,7 +192,20 @@ export default function Register() {
 
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, role: 'student' };
+      // 1. Strict Email Uniqueness Check (Local & Session)
+      const storedUsersRaw = localStorage.getItem('registeredUsers');
+      const existingUsers = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
+      const isDuplicate = existingUsers.some(
+        u => u && u.email && u.email.toLowerCase().trim() === formData.email.toLowerCase().trim()
+      );
+
+      if (isDuplicate) {
+        setServerError(`An account with email (${formData.email}) is already registered. Only one student per email is allowed. Please log in.`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const payload = { ...formData, email: formData.email.toLowerCase().trim(), role: 'student' };
       if (formData.college === 'Other' && formData.otherCollege) {
         payload.college = formData.otherCollege;
       }
@@ -213,15 +229,19 @@ export default function Register() {
         const data = await response.json();
         if (response.ok && data.user) {
           registeredUser = data.user;
+        } else if (!response.ok) {
+          setServerError(data.message || 'Registration failed.');
+          setIsSubmitting(false);
+          return;
         }
-      } catch {
-        // Local persistence fallback
+      } catch (err) {
+        console.warn('Backend server unavailable, proceeding with local registration fallback.', err);
       }
 
       // Persist in registeredUsers array & active session
-      const storedUsersRaw = localStorage.getItem('registeredUsers');
-      const existingUsers = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
-      const updatedUsers = [...existingUsers.filter(u => u.email !== registeredUser.email), registeredUser];
+      const currentStored = localStorage.getItem('registeredUsers');
+      const currentUsers = currentStored ? JSON.parse(currentStored) : [];
+      const updatedUsers = [...currentUsers.filter(u => u && u.email && u.email.toLowerCase() !== registeredUser.email.toLowerCase()), registeredUser];
       localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
       localStorage.setItem('user', JSON.stringify(registeredUser));
 
@@ -343,29 +363,71 @@ export default function Register() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 <div className={`form-group ${errors.password ? 'error' : ''}`}>
                   <label className="form-label">Password <span style={{ color: 'var(--red-primary)' }}>*</span></label>
-                  <input
-                    type="password"
-                    name="password"
-                    className="form-input"
-                    placeholder="Min 8 chars"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      className="form-input"
+                      placeholder="Min 8 chars"
+                      value={formData.password}
+                      onChange={handleChange}
+                      style={{ paddingRight: '40px' }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6b7280',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                   {errors.password && <span className="error-message">{errors.password}</span>}
                 </div>
 
                 <div className={`form-group ${errors.confirmPassword ? 'error' : ''}`}>
                   <label className="form-label">Confirm Password <span style={{ color: 'var(--red-primary)' }}>*</span></label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    className="form-input"
-                    placeholder="Re-enter password"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      className="form-input"
+                      placeholder="Re-enter password"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      style={{ paddingRight: '40px' }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6b7280',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                   {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
                 </div>
               </div>

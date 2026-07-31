@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import nmLogo from '../assets/nm_logo.png';
+import tnskillLogo from '../assets/tnskill_logo.png';
 import smLogo from '../assets/sm_logo.png';
 import '../styles/Navbar.css';
 
@@ -39,10 +39,10 @@ export default function Navbar() {
       <div className="navbar-container">
         <Link to="/" className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img
-            src={nmLogo}
-            alt="Naan Mudhalvan Logo"
+            src={tnskillLogo}
+            alt="TNSkill Logo"
             className="navbar-logo"
-            style={{ height: '55px', width: 'auto' }}
+            style={{ height: '48px', width: 'auto' }}
           />
           <span style={{ height: '30px', width: '1px', background: 'rgba(0,0,0,0.15)' }}></span>
           <img

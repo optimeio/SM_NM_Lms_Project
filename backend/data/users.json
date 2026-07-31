@@ -1,0 +1,28 @@
+[
+  {
+    "_id": "admin-1",
+    "fullName": "SM Groups Administrator",
+    "email": "thesmgroups@gmail.com",
+    "password": "TSMGPVT@2026",
+    "role": "admin",
+    "college": "The SM Groups",
+    "department": "Administration"
+  },
+  {
+    "_id": "user-1785476026462",
+    "fullName": "Raju",
+    "email": "dhanush.glitz@gmail.com",
+    "phone": "9078674523",
+    "gender": "Male",
+    "password": "asdf@123",
+    "college": "PSG College of Technology",
+    "department": "CSE",
+    "year": "III Year",
+    "district": "Mayiladuthurai",
+    "role": "student",
+    "assignedCourses": [
+      "NTEDU0001"
+    ],
+    "course_unique_code": "NTEDU0001"
+  }
+]

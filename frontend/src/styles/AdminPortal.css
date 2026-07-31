@@ -172,9 +172,12 @@
 /* ===== MAIN CONTENT PANEL ===== */
 .admin-main-content {
   margin-left: 270px;
-  flex-grow: 1;
+  width: calc(100% - 270px);
+  max-width: calc(100% - 270px);
   padding: 36px 40px;
   min-height: 100vh;
+  box-sizing: border-box;
+  overflow-x: auto;
 }
 
 /* HEADER BAR */
@@ -216,9 +219,10 @@
 /* ===== DASHBOARD STATS ===== */
 .admin-stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 20px;
   margin-bottom: 30px;
+  width: 100%;
 }
 
 .admin-stat-card {
@@ -346,7 +350,8 @@
   background-color: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
+  width: 100%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
@@ -885,6 +890,8 @@
   }
   .admin-main-content {
     margin-left: 0;
+    width: 100% !important;
+    max-width: 100% !important;
     padding: 20px 16px;
   }
   .admin-stats-row {

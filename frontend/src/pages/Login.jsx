@@ -4,7 +4,7 @@ import {
   User, Lock, Eye, EyeOff, Landmark, Code2, Lightbulb, BarChart2,
   GraduationCap, BookOpen, Trophy, Rocket
 } from 'lucide-react';
-import nmLogo from '../assets/nm_logo.png';
+import tnskillLogo from '../assets/tnskill_logo.png';
 import smLogo from '../assets/sm_logo.png';
 import studentsBg from '../assets/robotics_hero.jpg';
 import '../styles/Auth.css';
@@ -63,42 +63,58 @@ export default function Login() {
         }
       }
 
-      // 2. Student Authentication Check
+      // 2. Try Backend Server Login First
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: inputUser, password: inputPass })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            localStorage.setItem('user', JSON.stringify(data.user));
+            navigate(data.user.role === 'admin' ? '/admin' : '/dashboard');
+            return;
+          }
+        }
+      } catch {
+        // Backend server offline/unreachable, fallback to local registeredUsers
+      }
+
+      // 3. Fallback check against registered users in local storage
       const storedUsersRaw = localStorage.getItem('registeredUsers');
       const registeredUsers = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
       
       const foundUser = registeredUsers.find(u => 
-        (u.email && u.email.toLowerCase() === inputUser) || 
-        u.phone === inputUser || 
-        (u.fullName && u.fullName.toLowerCase() === inputUser)
+        (u.email && u.email.trim().toLowerCase() === inputUser) || 
+        (u.phone && u.phone.trim() === inputUser) || 
+        (u.fullName && u.fullName.trim().toLowerCase() === inputUser)
       );
 
       if (foundUser) {
-        if (foundUser.password && foundUser.password !== inputPass) {
-          setServerError('Incorrect password for registered account. Please check your credentials.');
+        if (foundUser.password && foundUser.password.trim() !== inputPass) {
+          setServerError('Invalid user name or password Please Check it');
           setIsSubmitting(false);
           return;
         }
         localStorage.setItem('user', JSON.stringify(foundUser));
+        
+        // Sync user to backend in background if missing
+        try {
+          fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(foundUser)
+          }).catch(() => {});
+        } catch {}
+
         navigate('/dashboard');
         return;
       }
 
-      // 3. Fallback for valid new credentials (format dynamic user name from email/register no)
-      const formattedName = inputUser.includes('@') 
-        ? inputUser.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-        : inputUser.replace(/\b\w/g, c => c.toUpperCase());
-        
-      const studentObj = {
-        fullName: formattedName,
-        email: inputUser.includes('@') ? inputUser : `${inputUser}@example.com`,
-        phone: inputUser.includes('@') ? '' : inputUser,
-        college: 'Sona College of Technology',
-        department: 'Information Technology',
-        role: 'student'
-      };
-      localStorage.setItem('user', JSON.stringify(studentObj));
-      navigate('/dashboard');
+      // If credentials do not match any registered account
+      setServerError('Invalid user name or password Please Check it');
     } catch {
       setServerError('Something went wrong during login. Please try again.');
     } finally {
@@ -115,7 +131,7 @@ export default function Login() {
         
         {/* Logos */}
         <div className="logos-wrapper">
-          <img src={nmLogo} alt="Naan Mudhalvan" className="nm-logo" />
+          <img src={tnskillLogo} alt="TNSkill" className="nm-logo" style={{ height: '55px', width: 'auto', objectFit: 'contain' }} />
           <div className="vertical-divider" />
           <img src={smLogo} alt="SM Groups" className="sm-logo" />
           <a href="#login-section" className="mobile-header-login-btn">
@@ -125,7 +141,7 @@ export default function Login() {
 
         {/* Hero Title */}
         <h1 className="hero-title">
-          <span className="title-highlight">Naan Mudhalvan</span>
+          <span className="title-highlight">TNSkill</span>
           <span className="title-sub">Learning Platform</span>
         </h1>
 

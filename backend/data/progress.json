@@ -1,0 +1,34 @@
+{
+  "dhanush.glitz@gmail.com_ElixirPhoenix01A": {
+    "user_unique_id": "dhanush.glitz@gmail.com",
+    "course_unique_code": "ElixirPhoenix01A",
+    "progress_percentage": "50",
+    "completedVideos": 5,
+    "midQuizPassed": false,
+    "midQuizScore": 0,
+    "finalQuizPassed": false,
+    "finalQuizScore": 0,
+    "certificate_issued": "false",
+    "certificate_issued_at": null,
+    "assessment_status": "false",
+    "course_complete": "false",
+    "total_score": "",
+    "updatedAt": "2026-07-31T05:34:43.233Z"
+  },
+  "dhanush.glitz@gmail.com_NTEDU0001": {
+    "user_unique_id": "dhanush.glitz@gmail.com",
+    "course_unique_code": "NTEDU0001",
+    "progress_percentage": "17",
+    "completedVideos": 1,
+    "midQuizPassed": false,
+    "midQuizScore": 0,
+    "finalQuizPassed": false,
+    "finalQuizScore": 0,
+    "certificate_issued": "false",
+    "certificate_issued_at": null,
+    "assessment_status": "false",
+    "course_complete": "false",
+    "total_score": "",
+    "updatedAt": "2026-07-31T09:46:50.643Z"
+  }
+}
