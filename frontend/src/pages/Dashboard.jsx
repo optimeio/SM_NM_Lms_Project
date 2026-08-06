@@ -1686,206 +1686,301 @@ Date: ${new Date().toLocaleDateString()}
               </div>
             </div>
           ) : activeTab === 'Profile' ? (
-            <div style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', padding: '30px', borderRadius: '16px', boxShadow: 'var(--shadow-md)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #e5e7eb', paddingBottom: '15px' }}>
-                <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#111827' }}>Student Profile & Details</h3>
-                {!isEditingProfile && (
-                  <button 
-                    onClick={() => { setIsEditingProfile(true); setProfileForm(user); }}
-                    style={{ background: 'var(--primary-red)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    ✏️ Edit Profile
-                  </button>
-                )}
-              </div>
+            <div className="profile-tab-grid">
+              <input 
+                type="file" 
+                id="profile-avatar-file-input" 
+                accept="image/*" 
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const updatedPhoto = reader.result;
+                    setUser(prev => ({ ...prev, profileImage: updatedPhoto }));
+                    setProfileForm(prev => ({ ...prev, profileImage: updatedPhoto }));
+                    
+                    fetch(`/api/users/profile?email=${encodeURIComponent(user.email.toLowerCase())}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ profileImage: updatedPhoto })
+                    }).catch(() => {});
+                  };
+                  reader.readAsDataURL(file);
+                }} 
+                style={{ display: 'none' }} 
+              />
 
-              {profileMessage && (
-                <div style={{ background: '#f0fdf4', color: '#16a34a', padding: '14px', borderRadius: '10px', marginBottom: '20px', fontWeight: 600, border: '1px solid #bbf7d0' }}>
-                  {profileMessage}
-                </div>
-              )}
-
-              {isEditingProfile ? (
-                <form onSubmit={handleSaveProfile} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  {/* Profile Image Edit */}
-                  <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '20px', background: '#f9fafb', padding: '16px', borderRadius: '12px' }}>
-                    {profileForm.profileImage ? (
-                      <img src={profileForm.profileImage} alt="Profile" style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary-red)' }} />
-                    ) : (
-                      <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: 'var(--primary-red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', fontWeight: 700 }}>
-                        {(profileForm.fullName || 'S').charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Profile Photo</label>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleImageChange}
-                        style={{ fontSize: '13px' }}
-                      />
-                      {profileForm.profileImage && (
-                        <button 
-                          type="button"
-                          onClick={() => setProfileForm(prev => ({ ...prev, profileImage: '' }))}
-                          style={{ marginLeft: '10px', background: '#ef4444', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
-                        >
-                          Remove Photo
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Full Name</label>
-                    <input 
-                      type="text" 
-                      name="fullName" 
-                      value={profileForm.fullName || ''} 
-                      onChange={handleProfileChange}
-                      required 
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Email Address</label>
-                    <input 
-                      type="email" 
-                      name="email" 
-                      value={profileForm.email || ''} 
-                      onChange={handleProfileChange}
-                      required 
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Phone Number</label>
-                    <input 
-                      type="text" 
-                      name="phone" 
-                      value={profileForm.phone || ''} 
-                      onChange={handleProfileChange}
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>College</label>
-                    <input 
-                      type="text" 
-                      name="college" 
-                      value={profileForm.college || ''} 
-                      onChange={handleProfileChange}
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Department</label>
-                    <input 
-                      type="text" 
-                      name="department" 
-                      value={profileForm.department || ''} 
-                      onChange={handleProfileChange}
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Year</label>
-                    <input 
-                      type="text" 
-                      name="year" 
-                      value={profileForm.year || ''} 
-                      onChange={handleProfileChange}
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Gender</label>
-                    <select 
-                      name="gender" 
-                      value={profileForm.gender || ''} 
-                      onChange={handleProfileChange}
-                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', background: '#fff' }}
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-
-                  <div style={{ gridColumn: 'span 2', display: 'flex', gap: '15px', marginTop: '10px' }}>
-                    <button 
-                      type="submit"
-                      style={{ background: 'var(--primary-red)', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}
-                    >
-                      Save Profile Changes
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setIsEditingProfile(false)}
-                      style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '12px 24px', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px', background: '#f9fafb', padding: '20px', borderRadius: '14px' }}>
+              {/* ── LEFT COLUMN: Summary & Progress ── */}
+              <div className="profile-left-col">
+                {/* Summary Card */}
+                <div className="profile-card-summary">
+                  <div className="profile-avatar-wrap">
                     {user.profileImage ? (
-                      <img src={user.profileImage} alt="Profile" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--primary-red)' }} />
+                      <img src={user.profileImage} alt="Profile" className="profile-avatar-img" />
                     ) : (
-                      <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--primary-red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 700 }}>
+                      <div className="profile-avatar-placeholder">
                         {(user.fullName || 'S').charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <div>
-                      <h4 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', margin: 0 }}>{user.fullName || 'Student Name'}</h4>
-                      <p style={{ color: '#6b7280', fontSize: '14px', margin: '4px 0 0 0' }}>{user.email || ''}</p>
-                      <span style={{ display: 'inline-block', marginTop: '6px', background: '#fee2e2', color: '#991b1b', fontSize: '12px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>
-                        {user.role === 'admin' ? 'Administrator' : 'Student Account'}
-                      </span>
-                    </div>
+                    <button 
+                      className="profile-camera-btn"
+                      type="button"
+                      onClick={() => document.getElementById('profile-avatar-file-input').click()}
+                      aria-label="Upload profile photo"
+                    >
+                      <Camera size={16} />
+                    </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>FULL NAME</span>
-                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.fullName || 'Not provided'}</strong>
+                  <h3 className="profile-summary-name">{user.fullName || 'Student'}</h3>
+                  <span className="profile-role-badge">Student Account</span>
+                  <span className="profile-summary-email">{user.email}</span>
+
+                  <div className="profile-info-list">
+                    <div className="profile-info-item">
+                      <div className="profile-info-icon-wrap">
+                        <GraduationCap size={18} />
+                      </div>
+                      <div className="profile-info-text-wrap">
+                        <span className="profile-info-primary">{user.college || 'Not Provided'}</span>
+                        <span className="profile-info-secondary">{user.department || 'Not Provided'} {user.year ? `(${user.year})` : ''}</span>
+                      </div>
                     </div>
 
-                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>EMAIL ADDRESS</span>
-                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.email || 'Not provided'}</strong>
-                    </div>
-
-                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>PHONE NUMBER</span>
-                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.phone || 'Not provided'}</strong>
-                    </div>
-
-                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>GENDER</span>
-                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.gender || 'Not provided'}</strong>
-                    </div>
-
-                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>COLLEGE</span>
-                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.college || 'Not provided'}</strong>
-                    </div>
-
-                    <div style={{ background: '#f9fafb', padding: '18px', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, display: 'block' }}>DEPARTMENT & YEAR</span>
-                      <strong style={{ fontSize: '16px', color: '#111827' }}>{user.department || 'Not provided'} {user.year ? `(${user.year})` : ''}</strong>
+                    <div className="profile-info-item">
+                      <div className="profile-info-icon-wrap">
+                        <Phone size={18} />
+                      </div>
+                      <div className="profile-info-text-wrap">
+                        <span className="profile-info-primary">{user.phone || 'Not Provided'}</span>
+                        <span className="profile-info-secondary">Phone Number</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
+
+                {/* Profile Completion Card */}
+                <div className="profile-card-completion">
+                  <div className="completion-circle-wrap">
+                    {(() => {
+                      const hasName = !!user.fullName;
+                      const hasAcademic = !!(user.college && user.department && user.year);
+                      const hasEmail = !!user.email;
+                      const hasPhoto = !!user.profileImage;
+                      const percentage = (hasName ? 25 : 0) + (hasAcademic ? 25 : 0) + (hasEmail ? 25 : 0) + (hasPhoto ? 25 : 0);
+                      
+                      const radius = 30;
+                      const circumference = 2 * Math.PI * radius;
+                      const offset = circumference - (percentage / 100) * circumference;
+
+                      return (
+                        <div style={{ position: 'relative', width: '72px', height: '72px' }}>
+                          <svg width="72" height="72" viewBox="0 0 72 72" style={{ transform: 'rotate(-90deg)' }}>
+                            <circle cx="36" cy="36" r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth="6" />
+                            <circle cx="36" cy="36" r={radius} fill="transparent" stroke="#4f46e5" strokeWidth="6" 
+                              strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" 
+                              style={{ transition: 'stroke-dashoffset 0.3s ease' }} />
+                          </svg>
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 800, color: '#1e293b' }}>
+                            {percentage}%
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="checklist-wrap">
+                    <h4 className="profile-completion-title" style={{ margin: 0 }}>Profile Completion</h4>
+                    <div className="checklist-item">
+                      <CheckCircle2 size={16} color={user.fullName ? '#10b981' : '#94a3b8'} />
+                      <span>Personal Details</span>
+                    </div>
+                    <div className="checklist-item">
+                      <CheckCircle2 size={16} color={(user.college && user.department && user.year) ? '#10b981' : '#94a3b8'} />
+                      <span>Academic Info</span>
+                    </div>
+                    <div className="checklist-item">
+                      <CheckCircle2 size={16} color={user.email ? '#10b981' : '#94a3b8'} />
+                      <span>Email Verified</span>
+                    </div>
+                    <div className="checklist-item">
+                      <CheckCircle2 size={16} color={user.profileImage ? '#10b981' : '#94a3b8'} />
+                      <span>Profile Photo</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── RIGHT COLUMN: Personal Information Form ── */}
+              <div className="profile-card-details">
+                <div className="profile-card-details-header">
+                  <h3>Personal Information</h3>
+                  {!isEditingProfile && (
+                    <button 
+                      className="profile-btn-edit"
+                      type="button"
+                      onClick={() => { setIsEditingProfile(true); setProfileForm(user); }}
+                    >
+                      ✏️ Edit Profile
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={handleSaveProfile}>
+                  <div className="profile-form-grid">
+                    {/* Full Name */}
+                    <div className="profile-field-group">
+                      <label>Full Name</label>
+                      <div className="profile-input-wrapper">
+                        <User size={16} className="profile-input-icon" />
+                        <input 
+                          type="text" 
+                          name="fullName"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.fullName || '') : (user.fullName || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Email Address */}
+                    <div className="profile-field-group">
+                      <label>Email Address</label>
+                      <div className="profile-input-wrapper">
+                        <Mail size={16} className="profile-input-icon" />
+                        <input 
+                          type="email" 
+                          name="email"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.email || '') : (user.email || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Phone Number */}
+                    <div className="profile-field-group">
+                      <label>Phone Number</label>
+                      <div className="profile-input-wrapper">
+                        <Phone size={16} className="profile-input-icon" />
+                        <input 
+                          type="text" 
+                          name="phone"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.phone || '') : (user.phone || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Gender */}
+                    <div className="profile-field-group">
+                      <label>Gender</label>
+                      <div className="profile-input-wrapper">
+                        <User size={16} className="profile-input-icon" />
+                        <select 
+                          name="gender"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.gender || '') : (user.gender || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                          style={{ appearance: 'none', background: '#fff' }}
+                        >
+                          <option value="">Select Gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                        <ChevronDown size={14} style={{ position: 'absolute', right: '14px', color: '#94a3b8', pointerEvents: 'none' }} />
+                      </div>
+                    </div>
+
+                    {/* College */}
+                    <div className="profile-field-group">
+                      <label>College</label>
+                      <div className="profile-input-wrapper">
+                        <Landmark size={16} className="profile-input-icon" />
+                        <input 
+                          type="text" 
+                          name="college"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.college || '') : (user.college || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Department */}
+                    <div className="profile-field-group">
+                      <label>Department</label>
+                      <div className="profile-input-wrapper">
+                        <BookOpen size={16} className="profile-input-icon" />
+                        <input 
+                          type="text" 
+                          name="department"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.department || '') : (user.department || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Year */}
+                    <div className="profile-field-group">
+                      <label>Year</label>
+                      <div className="profile-input-wrapper">
+                        <Calendar size={16} className="profile-input-icon" />
+                        <input 
+                          type="text" 
+                          name="year"
+                          className="profile-input"
+                          value={isEditingProfile ? (profileForm.year || '') : (user.year || '')}
+                          onChange={handleProfileChange}
+                          disabled={!isEditingProfile}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Student ID */}
+                    <div className="profile-field-group">
+                      <label>Student ID</label>
+                      <div className="profile-input-wrapper">
+                        <Contact size={16} className="profile-input-icon" />
+                        <input 
+                          type="text" 
+                          className="profile-input"
+                          value={user.user_unique_id || user._id || 'CT2023001'}
+                          disabled
+                        />
+                      </div>
+                    </div>
+
+                    {/* Actions row in edit mode */}
+                    {isEditingProfile && (
+                      <div className="profile-actions-row">
+                        <button type="submit" className="profile-btn-save">
+                          <Save size={16} /> Save Changes
+                        </button>
+                        <button 
+                          type="button" 
+                          className="profile-btn-cancel"
+                          onClick={() => setIsEditingProfile(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </form>
+              </div>
             </div>
           ) : null}
         </div>
