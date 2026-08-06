@@ -12,7 +12,8 @@ const userSchema = new mongoose.Schema({
   district: { type: String },
   role: { type: String, enum: ['student', 'admin'], default: 'student' },
   assignedCourses: [{ type: String }],
-  course_unique_code: { type: String }
+  course_unique_code: { type: String },
+  profileImage: { type: String }
 }, { timestamps: true });
 
 export default mongoose.models.User || mongoose.model('User', userSchema);

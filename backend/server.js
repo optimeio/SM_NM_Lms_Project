@@ -439,6 +439,50 @@ app.get('/api/users/profile', async (req, res) => {
   }
 });
 
+// 3c. Update User Profile Endpoint (Supports base64 profileImage)
+app.put('/api/users/profile', async (req, res) => {
+  try {
+    const { email } = req.query;
+    const updateData = req.body || {};
+    if (!email) {
+      return res.status(400).json({ message: 'Email query parameter is required.' });
+    }
+    const targetEmail = String(email).trim().toLowerCase();
+
+    // 1. Update in MongoDB if connected
+    let updatedUser = null;
+    if (mongoose.connection.readyState === 1) {
+      try {
+        updatedUser = await User.findOneAndUpdate(
+          { email: targetEmail },
+          { $set: updateData },
+          { new: true }
+        );
+      } catch (dbErr) {
+        console.warn('MongoDB profile update error:', dbErr.message);
+      }
+    }
+
+    // 2. Update in memoryUsers
+    const memIdx = memoryUsers.findIndex(u => u.email && u.email.toLowerCase() === targetEmail);
+    if (memIdx >= 0) {
+      memoryUsers[memIdx] = { ...memoryUsers[memIdx], ...updateData };
+      if (!updatedUser) {
+        updatedUser = memoryUsers[memIdx];
+      }
+    }
+    saveUsersToFile();
+
+    if (updatedUser) {
+      return res.json({ success: true, message: 'Profile updated successfully.', user: updatedUser });
+    }
+    return res.status(404).json({ message: 'User not found.' });
+  } catch (err) {
+    console.error('Profile Update API Error:', err);
+    res.status(500).json({ message: 'Server error updating user profile.' });
+  }
+});
+
 // 4. Admin: Get Registered Users List (Students Only)
 app.get('/api/admin/users', async (req, res) => {
   try {

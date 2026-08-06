@@ -259,7 +259,7 @@ Date: ${new Date().toLocaleDateString()}
     setProfileForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
     setUser(profileForm);
     localStorage.setItem('user', JSON.stringify(profileForm));
@@ -271,6 +271,16 @@ Date: ${new Date().toLocaleDateString()}
         (u.email && u.email === profileForm.email) ? { ...u, ...profileForm } : u
       );
       localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
+    }
+
+    try {
+      await fetch(`/api/users/profile?email=${encodeURIComponent(profileForm.email.toLowerCase())}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileForm)
+      });
+    } catch (err) {
+      console.warn('Could not sync updated profile to backend server:', err.message);
     }
 
     setIsEditingProfile(false);
