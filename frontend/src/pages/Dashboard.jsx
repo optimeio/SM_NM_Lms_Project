@@ -4,7 +4,8 @@ import {
   LayoutDashboard, BookOpen, Video, FileText, GraduationCap, Award, FolderOpen, 
   Trophy, MessageSquare, Calendar, User, Settings, LogOut, Search, Bell, ChevronDown,
   Megaphone, ShieldCheck, Play, BookOpenCheck, Medal, Menu, X, Code2, Cpu, Wifi,
-  Settings2, Compass, BarChart3, Sparkles
+  Settings2, Compass, BarChart3, Sparkles, Mail, Phone, Landmark, Camera, CheckCircle2,
+  Save, Contact
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import tnskillLogo from '../assets/tnskill_logo.png';
@@ -1945,20 +1946,6 @@ Date: ${new Date().toLocaleDateString()}
                           value={isEditingProfile ? (profileForm.year || '') : (user.year || '')}
                           onChange={handleProfileChange}
                           disabled={!isEditingProfile}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Student ID */}
-                    <div className="profile-field-group">
-                      <label>Student ID</label>
-                      <div className="profile-input-wrapper">
-                        <Contact size={16} className="profile-input-icon" />
-                        <input 
-                          type="text" 
-                          className="profile-input"
-                          value={user.user_unique_id || user._id || 'CT2023001'}
-                          disabled
                         />
                       </div>
                     </div>
