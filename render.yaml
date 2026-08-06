@@ -13,11 +13,11 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CLIENT_KEY
-        sync: true
+        value: placeholder_change_me
       - key: CLIENT_SECRET
-        sync: true
+        value: placeholder_change_me
       - key: MONGODB_URI
-        sync: true
+        value: placeholder_change_me
     disk:
       name: courses-storage
       mountPath: /opt/render/project/src/backend/courses
