@@ -10,10 +10,11 @@ import User from './models/User.js';
 import Course from './models/Course.js';
 import Progress from './models/Progress.js';
 
-dotenv.config();
-
+// Resolve __dirname first so dotenv loads backend/.env correctly
+// regardless of which directory the process is started from
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Ensure local persistence directory exists
 const DATA_DIR = path.join(__dirname, 'data');
@@ -40,11 +41,65 @@ app.use('/courses', express.static(path.join(__dirname, 'courses')));
 const primaryURI = process.env.MONGODB_URI;
 const fallbackURI = process.env.MONGODB_URI_FALLBACK;
 
+async function syncManifestsToMongoDB() {
+  if (mongoose.connection.readyState !== 1) return;
+  const coursesDir = path.join(__dirname, 'courses');
+  if (!fs.existsSync(coursesDir)) return;
+  try {
+    const folders = fs.readdirSync(coursesDir);
+    let synced = 0;
+    for (const folder of folders) {
+      const manifestPath = path.join(coursesDir, folder, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) continue;
+      try {
+        const courseObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        if (!courseObj || !courseObj.course_unique_code) continue;
+
+        // Also load midQuiz.json and finalQuiz.json if they exist and are more complete
+        const midQuizPath = path.join(coursesDir, folder, 'midQuiz.json');
+        const finalQuizPath = path.join(coursesDir, folder, 'finalQuiz.json');
+        if (fs.existsSync(midQuizPath)) {
+          try {
+            const mq = JSON.parse(fs.readFileSync(midQuizPath, 'utf8'));
+            if (mq && mq.questions && mq.questions.length > 0) courseObj.midQuiz = mq;
+          } catch (e) { /* ignore invalid json */ }
+        }
+        if (fs.existsSync(finalQuizPath)) {
+          try {
+            const fq = JSON.parse(fs.readFileSync(finalQuizPath, 'utf8'));
+            if (fq && fq.questions && fq.questions.length > 0) courseObj.finalQuiz = fq;
+          } catch (e) { /* ignore invalid json */ }
+        }
+
+        await Course.findOneAndUpdate(
+          { course_unique_code: courseObj.course_unique_code },
+          courseObj,
+          { upsert: true, new: true }
+        );
+
+        // Also update memoryCourses so in-memory is consistent
+        const idx = memoryCourses.findIndex(c => c.course_unique_code === courseObj.course_unique_code);
+        if (idx >= 0) memoryCourses[idx] = courseObj;
+        else memoryCourses.push(courseObj);
+
+        synced++;
+      } catch (err) {
+        console.warn(`Could not sync manifest for ${folder}:`, err.message);
+      }
+    }
+    if (synced > 0) console.log(`🔄 Synced ${synced} course manifest(s) from disk → MongoDB (quiz/video data updated).`);
+  } catch (e) {
+    console.warn('Could not sync manifests to MongoDB:', e.message);
+  }
+}
+
 async function connectDatabase() {
   if (primaryURI && !primaryURI.includes('<db_password>')) {
     try {
       await mongoose.connect(primaryURI);
       console.log('✅ Connected to MongoDB Atlas via Primary SRV Connection');
+      // Sync disk manifests → MongoDB so any manual JSON edits take effect
+      await syncManifestsToMongoDB();
       return;
     } catch (err) {
       console.warn('⚠️ Primary MongoDB Connection error:', err.message);
@@ -55,6 +110,8 @@ async function connectDatabase() {
     try {
       await mongoose.connect(fallbackURI);
       console.log('✅ Connected to MongoDB Atlas via Seed List Fallback Connection');
+      // Sync disk manifests → MongoDB so any manual JSON edits take effect
+      await syncManifestsToMongoDB();
       return;
     } catch (err) {
       console.warn('⚠️ Fallback MongoDB Connection error:', err.message);
@@ -138,6 +195,16 @@ function loadPersistentData() {
           try {
             const courseObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
             if (courseObj && courseObj.course_unique_code) {
+              const pptsFolder = path.join(coursesDir, folder, 'ppts');
+              if (fs.existsSync(pptsFolder) && (!courseObj.ppts || courseObj.ppts.length === 0)) {
+                const pptFiles = fs.readdirSync(pptsFolder).filter(f => !f.startsWith('.'));
+                courseObj.ppts = pptFiles.map(f => `/courses/${folder}/ppts/${f}`);
+              }
+              const vidsFolder = path.join(coursesDir, folder, 'videos');
+              if (fs.existsSync(vidsFolder) && (!courseObj.videos || courseObj.videos.length === 0)) {
+                const vidFiles = fs.readdirSync(vidsFolder).filter(f => !f.startsWith('.'));
+                courseObj.videos = vidFiles.map(f => `/courses/${folder}/videos/${f}`);
+              }
               const existingIdx = memoryCourses.findIndex(c => c.course_unique_code === courseObj.course_unique_code);
               if (existingIdx >= 0) {
                 memoryCourses[existingIdx] = courseObj;
@@ -301,8 +368,8 @@ app.post('/api/auth/login', async (req, res) => {
 // TOKEN RETRIEVAL & REFRESH ENDPOINTS (/api/v1/lms/client/token/)
 // ----------------------------------------------------
 const JWT_SECRET = process.env.JWT_SECRET || 'sm_nm_lms_secret_key_2026';
-const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY, 'CsVPGXb4PCKVAS0DeDP3t1yTPu8VGQrl', 'lms_client_key_2026'].filter(Boolean);
-const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET, 'A3srNJgzIz309Sa6FBGDQDP2tyuicvIb', 'lms_client_secret_2026'].filter(Boolean);
+const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY, '59e8bb42f89d5ee93ff466be97022427', 'lms_client_key_2026'].filter(Boolean);
+const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET, 'f7a761767124aef8b904c49b52a555d6', 'lms_client_secret_2026'].filter(Boolean);
 
 app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/token/'], (req, res) => {
   const body = req.body || {};
@@ -341,6 +408,34 @@ app.post(['/lms/client/token/refresh/', '/api/lms/client/token/refresh/', '/api/
     return res.json({ status: true, access, expires_in: 3600 });
   } catch (err) {
     return res.status(401).json({ status: false, message: 'Invalid or expired refresh token.' });
+  }
+});
+
+// 3b. User Profile Details Endpoint
+app.get('/api/users/profile', async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ message: 'Email query parameter is required.' });
+    }
+    const targetEmail = String(email).trim().toLowerCase();
+
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findOne({ email: targetEmail });
+      if (user) {
+        return res.json({ success: true, user });
+      }
+    }
+
+    const user = memoryUsers.find(u => u.email && u.email.toLowerCase() === targetEmail);
+    if (user) {
+      return res.json({ success: true, user });
+    }
+
+    return res.status(404).json({ message: 'User not found.' });
+  } catch (err) {
+    console.error('Profile API Error:', err);
+    res.status(500).json({ message: 'Server error fetching user profile.' });
   }
 });
 
@@ -493,10 +588,277 @@ const authenticateTokenHeader = (req, res, next) => {
   next();
 };
 
+
+const TNSKILL_BASE = 'https://sandbox-api.skilldevelopment.tn.gov.in';
+
+
+// Helper to save base64 videos/ppts to physical files on disk
+function savePhysicalFiles(course_unique_code, videos, ppts) {
+  const safeFolderCode = course_unique_code.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const courseDir = path.join(__dirname, 'courses', safeFolderCode);
+  const videosDir = path.join(courseDir, 'videos');
+  const pptsDir = path.join(courseDir, 'ppts');
+
+  if (!fs.existsSync(courseDir)) fs.mkdirSync(courseDir, { recursive: true });
+  if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
+  if (!fs.existsSync(pptsDir)) fs.mkdirSync(pptsDir, { recursive: true });
+
+  const savedVideos = (videos || []).map((vidData, idx) => {
+    const vidFileName = `video_${idx + 1}.mp4`;
+    const vidFilePath = path.join(videosDir, vidFileName);
+
+    // Save base64 encoded video to disk and return the URL path
+    if (typeof vidData === 'string' && vidData.startsWith('data:video')) {
+      try {
+        const base64Data = vidData.split(';base64,').pop();
+        fs.writeFileSync(vidFilePath, base64Data, { encoding: 'base64' });
+        return `/courses/${safeFolderCode}/videos/${vidFileName}`;
+      } catch (e) {
+        console.error(`Error saving ${vidFileName}:`, e);
+        return vidData; // Return original data if save fails
+      }
+    }
+
+    // If it's already a URL path (http/https or /courses/...), keep it as-is
+    if (typeof vidData === 'string' && (vidData.startsWith('http') || vidData.startsWith('/courses/'))) {
+      return vidData;
+    }
+
+    // Empty slot — return empty string (don't generate placeholder paths)
+    return '';
+  });
+
+  const savedPpts = (ppts || []).map((pptData, idx) => {
+    const pptFileName = `presentation_${idx + 1}.pptx`;
+    const pptFilePath = path.join(pptsDir, pptFileName);
+
+    // Save base64 encoded PPT/PDF to disk and return the URL path
+    if (typeof pptData === 'string' && pptData.startsWith('data:')) {
+      try {
+        const base64Data = pptData.split(';base64,').pop();
+        fs.writeFileSync(pptFilePath, base64Data, { encoding: 'base64' });
+        return `/courses/${safeFolderCode}/ppts/${pptFileName}`;
+      } catch (e) {
+        console.error(`Error saving ${pptFileName}:`, e);
+        return pptData; // Return original data if save fails
+      }
+    }
+
+    // If it's already a URL path (http/https or /courses/...), keep it as-is
+    if (typeof pptData === 'string' && (pptData.startsWith('http') || pptData.startsWith('/courses/'))) {
+      return pptData;
+    }
+
+    // Empty slot — return empty string (don't generate placeholder paths)
+    return '';
+  });
+
+  return { savedVideos, savedPpts, courseDir, safeFolderCode };
+}
+
+// ----------------------------------------------------
+// SAVE DRAFT ENDPOINT: POST /lms/client/course/save-draft/
+// Saves course with is_active: false (draft, not visible to students)
+// ----------------------------------------------------
+app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'], authenticateTokenHeader, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { course_unique_code, course_name } = body;
+
+    if (!course_unique_code || (!course_name && !body.title)) {
+      return res.status(400).json({ status: false, message: 'course_unique_code and course_name are required.' });
+    }
+
+    // Extract & save physical media files to disk first, converting Base64 to web URLs
+    const { savedVideos, savedPpts, courseDir, safeFolderCode } = savePhysicalFiles(course_unique_code, body.videos, body.ppts);
+
+    const courseData = {
+      course_unique_code,
+      course_name: course_name || body.title,
+      course_description: body.course_description || body.content || '',
+      course_image_url: body.course_image_url || body.image || '',
+      instructor: body.instructor || 'Instructor',
+      duration: String(body.duration || '0'),
+      number_of_videos: String(body.number_of_videos || (body.videos ? body.videos.length : '12')),
+      language: body.language || 'english',
+      main_stream: body.main_stream || 'engineering',
+      sub_stream: body.sub_stream || 'cse',
+      category: body.category || 'General',
+      system_requirements: body.system_requirements || '',
+      has_subtitles: String(body.has_subtitles ?? true),
+      reference_id: body.reference_id || `DRAFT-${Date.now()}`,
+      course_type: body.course_type || 'ONLINE',
+      location: body.location || '',
+      is_active: false,        // DRAFT — hidden from students
+      approval_status: false,  // DRAFT — not approved
+      videos: savedVideos,     // Clean paths
+      ppts: savedPpts,         // Clean paths
+      folderPath: courseDir,
+      midQuiz: body.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
+      finalQuiz: body.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] }
+    };
+
+    // Write complete course payload output files into project directory
+    fs.writeFileSync(path.join(courseDir, 'manifest.json'), JSON.stringify(courseData, null, 2));
+    fs.writeFileSync(path.join(courseDir, 'course_content.json'), JSON.stringify(body.course_content || [], null, 2));
+    fs.writeFileSync(path.join(courseDir, 'course_objective.json'), JSON.stringify(body.course_objective || [], null, 2));
+    fs.writeFileSync(path.join(courseDir, 'midQuiz.json'), JSON.stringify(courseData.midQuiz, null, 2));
+    fs.writeFileSync(path.join(courseDir, 'finalQuiz.json'), JSON.stringify(courseData.finalQuiz, null, 2));
+
+    // Save to MongoDB
+    if (mongoose.connection.readyState === 1) {
+      const saved = await Course.findOneAndUpdate(
+        { course_unique_code },
+        courseData,
+        { upsert: true, new: true }
+      );
+      return res.status(200).json({ status: true, message: 'Course saved as draft.', draft: true, course: saved });
+    }
+
+    // Fallback: sync memory store
+    const idx = memoryCourses.findIndex(c => c.course_unique_code === course_unique_code);
+    if (idx >= 0) memoryCourses[idx] = { ...memoryCourses[idx], ...courseData };
+    else memoryCourses.push(courseData);
+
+    return res.status(200).json({ status: true, message: 'Course saved as draft (local).', draft: true, course: courseData });
+  } catch (err) {
+    console.error('Save Draft Error:', err);
+    return res.status(500).json({ status: false, message: 'Server error saving draft.' });
+  }
+});
+
+// ----------------------------------------------------
+// TNSKILL PROXY: POST /api/student/subscribe
+// Forwards to: https://sandbox-api.tnskill.tn.gov.in/skilldevelopment/api/course/subscribe/
+// ----------------------------------------------------
+app.post(['/api/student/subscribe', '/lms/client/course/subscribe/'], async (req, res) => {
+  const body = req.body || {};
+  const authHeader = req.headers['authorization'] || '';
+  try {
+    const tnRes = await fetch(`${TNSKILL_BASE}/skilldevelopment/api/course/subscribe/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader.startsWith('Bearer ') ? authHeader : `Bearer ${authHeader}`
+      },
+      body: JSON.stringify(body)
+    });
+    if (tnRes.ok) {
+      const tnData = await tnRes.json().catch(() => ({}));
+      return res.status(200).json({
+        subscription_registration_status: tnData.subscription_registration_status ?? true,
+        subscription_reference_id: tnData.subscription_reference_id || `LOCAL-${Date.now()}`,
+        source: 'tnskill'
+      });
+    }
+    // Fallback: local subscription success
+    return res.status(200).json({
+      subscription_registration_status: true,
+      subscription_reference_id: `LOCAL-${Date.now()}`,
+      source: 'local_fallback'
+    });
+  } catch {
+    return res.status(200).json({
+      subscription_registration_status: true,
+      subscription_reference_id: `LOCAL-${Date.now()}`,
+      source: 'local_fallback'
+    });
+  }
+});
+
+// ----------------------------------------------------
+// TNSKILL PROXY: POST /api/student/course-access
+// Forwards to: https://sandbox-api.tnskill.tn.gov.in/skilldevelopment/api/course/access/
+// ----------------------------------------------------
+app.post(['/api/student/course-access', '/lms/client/course/access/'], async (req, res) => {
+  const body = req.body || {};
+  const authHeader = req.headers['authorization'] || '';
+  try {
+    const tnRes = await fetch(`${TNSKILL_BASE}/skilldevelopment/api/course/access/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader.startsWith('Bearer ') ? authHeader : `Bearer ${authHeader}`
+      },
+      body: JSON.stringify(body)
+    });
+    if (tnRes.ok) {
+      const tnData = await tnRes.json().catch(() => ({}));
+      return res.status(200).json({
+        access_status: tnData.access_status ?? true,
+        access_url: tnData.access_url || null,
+        source: 'tnskill'
+      });
+    }
+    return res.status(200).json({ access_status: true, access_url: null, source: 'local_fallback' });
+  } catch {
+    return res.status(200).json({ access_status: true, access_url: null, source: 'local_fallback' });
+  }
+});
+
+// ----------------------------------------------------
+// TNSKILL PROXY: POST /api/student/progress-info
+// Forwards to: https://sandbox-api.tnskill.tn.gov.in/skilldevelopment/api/student/progress
+// Also checks local MongoDB progress first
+// ----------------------------------------------------
+app.post(['/api/student/progress-info', '/lms/client/student/progress/'], async (req, res) => {
+  const { user_id, course_id } = req.body || {};
+  const authHeader = req.headers['authorization'] || '';
+
+  // 1. Check local MongoDB progress
+  let localProgress = null;
+  try {
+    if (mongoose.connection.readyState === 1) {
+      localProgress = await Progress.findOne({ user_unique_id: user_id, course_unique_code: course_id });
+    } else {
+      const key = `${user_id}_${course_id}`;
+      localProgress = userProgressStore[key] || null;
+    }
+  } catch { /* ignore */ }
+
+  // 2. Try TNSkill for authoritative data
+  try {
+    const tnRes = await fetch(`${TNSKILL_BASE}/skilldevelopment/api/student/progress`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader.startsWith('Bearer ') ? authHeader : `Bearer ${authHeader}`
+      },
+      body: JSON.stringify({ user_id, course_id })
+    });
+    if (tnRes.ok) {
+      const tnData = await tnRes.json().catch(() => null);
+      if (tnData) {
+        return res.status(200).json({ ...tnData, source: 'tnskill' });
+      }
+    }
+  } catch { /* fallback to local */ }
+
+  // 3. Return local progress as fallback
+  if (localProgress) {
+    return res.status(200).json({
+      progress_percentage: String(localProgress.progress_percentage || '0'),
+      certificate_issued: String(localProgress.certificate_issued || 'false'),
+      assessment_status: String(localProgress.assessment_status || 'false'),
+      course_complete: String(localProgress.course_complete || 'false'),
+      source: 'local'
+    });
+  }
+
+  return res.status(200).json({
+    progress_percentage: '0',
+    certificate_issued: 'false',
+    assessment_status: 'false',
+    course_complete: 'false',
+    source: 'local_default'
+  });
+});
+
 // ----------------------------------------------------
 // COURSE PUBLISH ENDPOINT: POST /lms/client/course/publish/
 // ----------------------------------------------------
 app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], authenticateTokenHeader, async (req, res) => {
+
   try {
     const body = req.body || {};
     const {
@@ -522,6 +884,9 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
       return res.status(400).json({ status: false, message: 'course_unique_code and course_name are required.' });
     }
 
+    // Extract & save physical media files to disk, converting Base64 to web URLs
+    const { savedVideos, savedPpts, courseDir, safeFolderCode } = savePhysicalFiles(course_unique_code, body.videos, body.ppts);
+
     const courseData = {
       course_unique_code,
       course_name: course_name || body.title,
@@ -541,64 +906,12 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
       location: location || '',
       is_active: true,
       approval_status: true,
-      videos: body.videos || [],
-      ppts: body.ppts || [],
+      videos: savedVideos,
+      ppts: savedPpts,
+      folderPath: courseDir,
       midQuiz: body.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
       finalQuiz: body.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] }
     };
-
-    // Automatically create physical course directory structure:
-    // backend/courses/<course_code>/
-    // ├── videos/ (video_1.mp4, video_2.mp4...)
-    // └── ppts/   (presentation_1.pptx...)
-    const safeFolderCode = course_unique_code.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const courseDir = path.join(__dirname, 'courses', safeFolderCode);
-    const videosDir = path.join(courseDir, 'videos');
-    const pptsDir = path.join(courseDir, 'ppts');
-
-    if (!fs.existsSync(courseDir)) fs.mkdirSync(courseDir, { recursive: true });
-    if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
-    if (!fs.existsSync(pptsDir)) fs.mkdirSync(pptsDir, { recursive: true });
-
-    // Extract & save physical video files
-    const savedVideos = (body.videos || []).map((vidData, idx) => {
-      const vidFileName = `video_${idx + 1}.mp4`;
-      const vidFilePath = path.join(videosDir, vidFileName);
-      
-      if (typeof vidData === 'string' && vidData.startsWith('data:video')) {
-        try {
-          const base64Data = vidData.split(';base64,').pop();
-          fs.writeFileSync(vidFilePath, base64Data, { encoding: 'base64' });
-          return `/courses/${safeFolderCode}/videos/${vidFileName}`;
-        } catch (e) {
-          console.error(`Error saving ${vidFileName}:`, e);
-          return `/courses/${safeFolderCode}/videos/${vidFileName}`;
-        }
-      }
-      return vidData || `/courses/${safeFolderCode}/videos/${vidFileName}`;
-    });
-
-    // Extract & save physical PPT files
-    const savedPpts = (body.ppts || []).map((pptData, idx) => {
-      const pptFileName = `presentation_${idx + 1}.pptx`;
-      const pptFilePath = path.join(pptsDir, pptFileName);
-
-      if (typeof pptData === 'string' && pptData.startsWith('data:')) {
-        try {
-          const base64Data = pptData.split(';base64,').pop();
-          fs.writeFileSync(pptFilePath, base64Data, { encoding: 'base64' });
-          return `/courses/${safeFolderCode}/ppts/${pptFileName}`;
-        } catch (e) {
-          console.error(`Error saving ${pptFileName}:`, e);
-          return `/courses/${safeFolderCode}/ppts/${pptFileName}`;
-        }
-      }
-      return pptData || `/courses/${safeFolderCode}/ppts/${pptFileName}`;
-    });
-
-    courseData.videos = savedVideos;
-    courseData.ppts = savedPpts;
-    courseData.folderPath = courseDir;
 
     // Write complete course payload output files into project directory
     fs.writeFileSync(path.join(courseDir, 'manifest.json'), JSON.stringify(courseData, null, 2));
@@ -661,15 +974,26 @@ app.get([
       if (is_active !== undefined) filter.is_active = is_active === 'true';
       if (approval_status !== undefined) filter.approval_status = approval_status === 'true';
 
-      const totalStudentsCount = await User.countDocuments({ role: { $ne: 'admin' } }).catch(() => memoryUsers.filter(u => u.role !== 'admin').length) || 1;
+      // Get all users and their assigned courses for accurate enrollment count
+      const allStudents = await User.find({ role: { $ne: 'admin' } }, { assignedCourses: 1, course_unique_code: 1 }).lean().catch(() => []);
       const dbCourses = await Course.find(filter).sort({ createdAt: -1 });
       coursesList = dbCourses.map(c => {
-        const trackedUsers = Object.values(userProgressStore).filter(p => p.course_unique_code === c.course_unique_code);
-        const enrolledCount = Math.max(trackedUsers.length, totalStudentsCount, 1);
+        const code = c.course_unique_code;
+        // Count students who have this course assigned OR have progress records
+        const assignedCount = allStudents.filter(u =>
+          (Array.isArray(u.assignedCourses) && u.assignedCourses.includes(code)) ||
+          u.course_unique_code === code
+        ).length;
+        const trackedCount = Object.values(userProgressStore).filter(p => p.course_unique_code === code).length;
+        const enrolledCount = Math.max(assignedCount, trackedCount, 0);
         return {
           name: c.course_name || c.title,
           course_id: c.course_unique_code,
+          course_unique_code: c.course_unique_code,
+          reference_id: c.reference_id || '',
           course_status: c.is_active,
+          is_active: c.is_active,
+          approval_status: c.approval_status,
           title: c.course_name || c.title,
           category: c.category,
           instructor: c.instructor,
@@ -698,12 +1022,24 @@ app.get([
         filtered = filtered.filter(c => Boolean(c.approval_status) === approvedBool);
       }
       coursesList = filtered.map(c => {
-        const trackedUsers = Object.values(userProgressStore).filter(p => p.course_unique_code === c.course_unique_code);
-        const enrolledCount = Math.max(trackedUsers.length, totalStudentsCount, 1);
+        const code = c.course_unique_code;
+        // Count students who have this course assigned OR have progress records
+        const assignedCount = memoryUsers.filter(u =>
+          u.role !== 'admin' && (
+            (Array.isArray(u.assignedCourses) && u.assignedCourses.includes(code)) ||
+            u.course_unique_code === code
+          )
+        ).length;
+        const trackedCount = Object.values(userProgressStore).filter(p => p.course_unique_code === code).length;
+        const enrolledCount = Math.max(assignedCount, trackedCount, 0);
         return {
           name: c.course_name,
           course_id: c.course_unique_code,
+          course_unique_code: c.course_unique_code,
+          reference_id: c.reference_id || '',
           course_status: c.is_active,
+          is_active: c.is_active,
+          approval_status: c.approval_status,
           title: c.course_name,
           category: c.category,
           instructor: c.instructor,
@@ -743,6 +1079,32 @@ app.delete([
 ], authenticateTokenHeader, async (req, res) => {
   try {
     const courseId = req.params.id;
+
+    // Find course first to extract course_unique_code for physical path deletion
+    let courseDoc = memoryCourses.find(c => c._id?.toString() === courseId || c.course_unique_code === courseId);
+    if (!courseDoc && mongoose.connection.readyState === 1) {
+      if (mongoose.Types.ObjectId.isValid(courseId)) {
+        courseDoc = await Course.findById(courseId);
+      } else {
+        courseDoc = await Course.findOne({ course_unique_code: courseId });
+      }
+    }
+
+    if (courseDoc) {
+      const targetUniqueCode = courseDoc.course_unique_code || courseDoc.course_id;
+      if (targetUniqueCode) {
+        const safeFolderCode = targetUniqueCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const courseDir = path.join(__dirname, 'courses', safeFolderCode);
+        if (fs.existsSync(courseDir)) {
+          try {
+            fs.rmSync(courseDir, { recursive: true, force: true });
+            console.log(`Successfully deleted physical course folder: ${courseDir}`);
+          } catch (dirErr) {
+            console.error(`Failed to delete physical course folder at ${courseDir}:`, dirErr);
+          }
+        }
+      }
+    }
 
     if (mongoose.connection.readyState === 1) {
       if (mongoose.Types.ObjectId.isValid(courseId)) {
@@ -884,7 +1246,7 @@ app.post(USER_TRACKING_PATHS, authenticateTokenHeader, async (req, res) => {
         if (existing.total_score !== undefined && existing.total_score !== "") payload.total_score = String(existing.total_score);
 
         const nmToken = req.headers['authorization'] || 'Bearer mock_nm_token_2026';
-        await fetch('https://sandbox-api.naanmudhalvan.in/api/v1/lms/client/course/xf/user-tracking', {
+        await fetch('https://sandbox-api.skilldevelopment.tn.gov.in/api/v1/lms/client/course/xf/user-tracking', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -948,6 +1310,189 @@ app.get('/api/quizzes', async (req, res) => {
   res.json({ success: true, quizzes: [] });
 });
 
+// 7. Direct PPT File Download Endpoint
+app.get(['/api/courses/:courseCode/ppt/:filename', '/courses/:courseCode/ppts/:filename'], (req, res, next) => {
+  const { courseCode, filename } = req.params;
+  const safeCode = courseCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeFile = path.basename(filename);
+  const filePath = path.join(__dirname, 'courses', safeCode, 'ppts', safeFile);
+  if (fs.existsSync(filePath)) {
+    return res.download(filePath, safeFile, (err) => {
+      if (err && !res.headersSent) {
+        return next();
+      }
+    });
+  }
+  next();
+});
+
+// ----------------------------------------------------
+// NAAN MUDHALVAN (TN SKILL) KNOWLEDGE PARTNER APIs
+// ----------------------------------------------------
+
+// 8. NM Course Subscribe API
+app.post('/nm/api/course/subscribe/', authenticateTokenHeader, async (req, res) => {
+  try {
+    const { user_id, course_id } = req.body || {};
+    
+    if (!user_id || !course_id) {
+      return res.json({ subscription_registration_status: false });
+    }
+
+    // Check if user exists, if not, we create a placeholder so they can be tracked
+    let existingUser = memoryUsers.find(u => u._id === user_id || String(u._id) === user_id || u.user_unique_id === user_id);
+    if (!existingUser && mongoose.connection.readyState === 1) {
+      existingUser = await User.findOne({ 
+        $or: [{ _id: user_id }, { user_unique_id: user_id }]
+      }).catch(() => null);
+    }
+
+    if (!existingUser) {
+      const newUser = {
+        _id: user_id,
+        user_unique_id: user_id,
+        fullName: req.body.student_name || 'NM Student',
+        email: `${user_id}@nm.student.local`,
+        password: 'nm_sso_login',
+        college: req.body.college_name || req.body.college_code || '',
+        department: req.body.branch_name || '',
+        district: req.body.district || '',
+        university: req.body.university || '',
+        role: 'student',
+        assignedCourses: [course_id],
+        course_unique_code: course_id
+      };
+      
+      memoryUsers.push(newUser);
+      saveUsersToFile();
+
+      if (mongoose.connection.readyState === 1) {
+        try {
+          await User.create(newUser);
+        } catch (e) {
+          console.warn('MongoDB NM User creation error:', e.message);
+        }
+      }
+    } else {
+      // Update assigned courses if they already exist
+      if (!existingUser.assignedCourses) existingUser.assignedCourses = [];
+      if (!existingUser.assignedCourses.includes(course_id)) {
+        existingUser.assignedCourses.push(course_id);
+        existingUser.course_unique_code = course_id;
+        saveUsersToFile();
+        
+        if (mongoose.connection.readyState === 1) {
+          await User.updateOne({ _id: existingUser._id }, { assignedCourses: existingUser.assignedCourses, course_unique_code: course_id }).catch(() => {});
+        }
+      }
+    }
+
+    return res.json({
+      subscription_registration_status: true,
+      subscription_reference_id: `SUB-${Date.now()}`
+    });
+  } catch (err) {
+    console.error('NM Subscribe Error:', err);
+    return res.json({ subscription_registration_status: false });
+  }
+});
+
+// 9. NM Course Access URL API
+app.post('/nm/api/course/access/', authenticateTokenHeader, async (req, res) => {
+  try {
+    const { user_id, course_id } = req.body || {};
+    
+    if (!user_id || !course_id) {
+      return res.json({ access_status: false });
+    }
+
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const access_url = `${FRONTEND_URL}?sso=true&uid=${encodeURIComponent(user_id)}&cid=${encodeURIComponent(course_id)}`;
+
+    return res.json({
+      access_status: true,
+      access_url: access_url
+    });
+  } catch (err) {
+    console.error('NM Access Error:', err);
+    return res.json({ access_status: false });
+  }
+});
+
+// 10. NM Student Progress API (Retrieval)
+app.post('/nm/api/student/progress', authenticateTokenHeader, async (req, res) => {
+  try {
+    const { user_id, course_id } = req.body || {};
+    
+    if (!user_id || !course_id) {
+      return res.status(400).json({ message: "Please provide valid user_id/ course_id" });
+    }
+
+    const key = `${user_id}_${course_id}`;
+    const progress = userProgressStore[key];
+
+    if (progress) {
+      return res.json({
+        progress_percentage: progress.progress_percentage || "0.00",
+        certificate_issued: progress.certificate_issued || "false",
+        assessment_status: progress.assessment_status || "false",
+        course_complete: progress.course_complete || "false"
+      });
+    }
+
+    // Default if no progress found yet
+    return res.json({
+      progress_percentage: "0.00",
+      certificate_issued: "false",
+      assessment_status: "false",
+      course_complete: "false"
+    });
+  } catch (err) {
+    console.error('NM Student Progress Error:', err);
+    return res.status(500).json({ message: "Server error retrieving progress" });
+  }
+});
+
+// 11. NM Student Token Check
+app.get('/lms/client/course/student/check/', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({
+      detail: "Authentication credentials were not provided.",
+      code: "not_authenticated"
+    });
+  }
+  
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+  try {
+    jwt.verify(token, JWT_SECRET);
+    return res.json({ status: true, message: 'Token is valid' });
+  } catch (err) {
+    return res.status(401).json({
+      detail: "Given token not valid for any token type",
+      code: "token_not_valid",
+      messages: [{
+        token_class: "AccessToken",
+        token_type: "access",
+        message: "Token is invalid or expired"
+      }]
+    });
+  }
+});
+
+// Serve static frontend files in production
+const frontendDist = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  // Only serve index.html for non-API routes (frontend routing)
+  app.get('*', (req, res) => {
+    const isApiRoute = req.path.startsWith('/api/') || req.path.startsWith('/lms/') || req.path.startsWith('/courses/');
+    if (isApiRoute) {
+      return res.status(404).json({ error: 'API route not found', path: req.path });
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 // Start Server
 app.listen(PORT, '0.0.0.0', () => {

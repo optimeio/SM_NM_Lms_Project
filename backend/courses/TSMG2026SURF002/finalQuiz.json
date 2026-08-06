@@ -1,0 +1,306 @@
+{
+  "title": "Final Course Quiz (After Video 12) - 25 Marks",
+  "totalMarks": 25,
+  "questions": [
+    {
+      "id": 1,
+      "question": "What is the purpose of a Multi-Section Surface?",
+      "options": [
+        "Create a surface by rotating a profile around an axis",
+        "Generate a smooth surface through multiple profiles",
+        "Remove unwanted portions of a surface",
+        "Join two existing surfaces"
+      ],
+      "correctAnswer": 1,
+      "marks": 1
+    },
+    {
+      "id": 2,
+      "question": "How many profiles are required to create a Multi-Section Surface?",
+      "options": [
+        "One profile only",
+        "One profile and one point only",
+        "Two or more profiles",
+        "One profile and one axis only"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    },
+    {
+      "id": 3,
+      "question": "What is the function of guide curves in surface modeling?",
+      "options": [
+        "Control the shape of the surface",
+        "Trim unwanted surface areas",
+        "Measure surface thickness",
+        "Apply material properties"
+      ],
+      "correctAnswer": 0,
+      "marks": 1
+    },
+    {
+      "id": 4,
+      "question": "Why are smooth surface transitions important?",
+      "options": [
+        "Reduce the number of sketches",
+        "Increase model thickness",
+        "Automatically create solid features",
+        "Improve surface quality and continuity"
+      ],
+      "correctAnswer": 3,
+      "marks": 1
+    },
+    {
+      "id": 5,
+      "question": "Which feature is commonly used to create complex freeform surfaces?",
+      "options": [
+        "Pocket",
+        "Adaptive Sweep",
+        "Pad",
+        "Shaft"
+      ],
+      "correctAnswer": 1,
+      "marks": 1
+    },
+    {
+      "id": 6,
+      "question": "Adaptive Sweep is mainly used for creating:",
+      "options": [
+        "Flat planar surfaces only",
+        "Solid extrusion features",
+        "Complex curved surfaces",
+        "Threaded components"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    },
+    {
+      "id": 7,
+      "question": "What is the purpose of a constrained sketch?",
+      "options": [
+        "Define the profile accurately",
+        "Increase rendering quality",
+        "Convert surfaces into solids",
+        "Remove surface gaps"
+      ],
+      "correctAnswer": 0,
+      "marks": 1
+    },
+    {
+      "id": 8,
+      "question": "Sweep errors are usually caused by:",
+      "options": [
+        "Hidden reference planes",
+        "Missing material",
+        "Low battery",
+        "Incorrect profiles or guide curves"
+      ],
+      "correctAnswer": 3,
+      "marks": 1
+    },
+    {
+      "id": 9,
+      "question": "Which command removes unwanted portions of a surface?",
+      "options": [
+        "Sweep",
+        "Trim",
+        "Join",
+        "Loft"
+      ],
+      "correctAnswer": 1,
+      "marks": 1
+    },
+    {
+      "id": 10,
+      "question": "Which command divides a surface using another element?",
+      "options": [
+        "Fill",
+        "Join",
+        "Split",
+        "Rotate"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    },
+    {
+      "id": 11,
+      "question": "What is the purpose of the Extrapolate command?",
+      "options": [
+        "Extend a surface beyond its existing boundary",
+        "Rotate a surface about an axis",
+        "Create a new sketch plane",
+        "Merge two surfaces together"
+      ],
+      "correctAnswer": 0,
+      "marks": 1
+    },
+    {
+      "id": 12,
+      "question": "Surface editing is mainly performed to:",
+      "options": [
+        "Change the coordinate system",
+        "Increase drawing scale",
+        "Reduce processor speed",
+        "Improve the quality and accuracy of the model"
+      ],
+      "correctAnswer": 3,
+      "marks": 1
+    },
+    {
+      "id": 13,
+      "question": "Which operation is commonly used to refine an existing surface?",
+      "options": [
+        "Pocket",
+        "Trim",
+        "Pad",
+        "Rib"
+      ],
+      "correctAnswer": 1,
+      "marks": 1
+    },
+    {
+      "id": 14,
+      "question": "What is the primary purpose of Surface Connections?",
+      "options": [
+        "Generate assembly constraints",
+        "Increase surface thickness",
+        "Smoothly join adjacent surfaces",
+        "Create solid bodies"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    },
+    {
+      "id": 15,
+      "question": "Which fillet is specifically designed for surface modeling?",
+      "options": [
+        "Shape Fillet",
+        "Chamfer",
+        "Pocket Fillet",
+        "Edge Offset"
+      ],
+      "correctAnswer": 0,
+      "marks": 1
+    },
+    {
+      "id": 16,
+      "question": "Edge Fillet is mainly used to:",
+      "options": [
+        "Split large surfaces",
+        "Offset reference planes",
+        "Create guide curves",
+        "Smooth sharp edges between surfaces"
+      ],
+      "correctAnswer": 3,
+      "marks": 1
+    },
+    {
+      "id": 17,
+      "question": "Which feature helps create smooth transitions between connected surfaces?",
+      "options": [
+        "Mirror",
+        "Scale",
+        "Shape Fillet",
+        "Translate"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    },
+    {
+      "id": 18,
+      "question": "What does G0 continuity represent?",
+      "options": [
+        "Position continuity",
+        "Tangency continuity",
+        "Curvature continuity",
+        "Surface thickness continuity"
+      ],
+      "correctAnswer": 0,
+      "marks": 1
+    },
+    {
+      "id": 19,
+      "question": "What does G1 continuity represent?",
+      "options": [
+        "Position continuity only",
+        "Tangency continuity between surfaces",
+        "Equal surface thickness",
+        "Material continuity"
+      ],
+      "correctAnswer": 1,
+      "marks": 1
+    },
+    {
+      "id": 20,
+      "question": "What is the purpose of continuity analysis?",
+      "options": [
+        "Create new reference planes",
+        "Generate tool paths",
+        "Convert surfaces into solids",
+        "Verify smooth transitions between surfaces"
+      ],
+      "correctAnswer": 3,
+      "marks": 1
+    },
+    {
+      "id": 21,
+      "question": "Surface Healing is used to:",
+      "options": [
+        "Increase model weight",
+        "Create assembly constraints",
+        "Repair gaps, overlaps, and defects in surfaces",
+        "Add textures to surfaces"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    },
+    {
+      "id": 22,
+      "question": "What is the main purpose of final validation?",
+      "options": [
+        "Ensure the model meets quality and design requirements",
+        "Increase rendering speed",
+        "Apply material properties",
+        "Create exploded views"
+      ],
+      "correctAnswer": 0,
+      "marks": 1
+    },
+    {
+      "id": 23,
+      "question": "Which process is commonly performed before completing a surface model?",
+      "options": [
+        "Drafting Annotation",
+        "Surface Healing",
+        "BOM Generation",
+        "Exploded Assembly Creation"
+      ],
+      "correctAnswer": 1,
+      "marks": 1
+    },
+    {
+      "id": 24,
+      "question": "Which tool is commonly used to identify defects in a surface model?",
+      "options": [
+        "Material Editor",
+        "Assembly Constraint",
+        "Sheet Metal Flattening",
+        "Surface Analysis"
+      ],
+      "correctAnswer": 3,
+      "marks": 1
+    },
+    {
+      "id": 25,
+      "question": "What is the expected outcome of a completed surface model?",
+      "options": [
+        "Multiple disconnected surfaces",
+        "Unfinished sketches with reference geometry",
+        "Smooth, accurate, fully connected, and validated geometry",
+        "A model containing surface gaps and overlaps"
+      ],
+      "correctAnswer": 2,
+      "marks": 1
+    }
+  ]
+}

@@ -102,7 +102,7 @@ body {
 }
 
 .nm-logo {
-  height: 68px;
+  height: 55px;
   object-fit: contain;
   filter: drop-shadow(0 4px 12px rgba(200, 16, 77, 0.08));
 }
@@ -819,6 +819,50 @@ body {
   
   .login-card {
     padding: 30px 20px;
+  }
+
+  .logos-wrapper {
+    gap: 10px;
+  }
+
+  .nm-logo {
+    height: 42px;
+  }
+
+  .sm-logo {
+    height: 32px;
+  }
+
+  .vertical-divider {
+    height: 28px;
+  }
+
+  .mobile-header-login-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .logos-wrapper {
+    gap: 6px;
+  }
+
+  .nm-logo {
+    height: 34px;
+  }
+
+  .sm-logo {
+    height: 25px;
+  }
+
+  .vertical-divider {
+    height: 22px;
+  }
+
+  .mobile-header-login-btn {
+    padding: 5px 10px;
+    font-size: 11px;
   }
 }
 

@@ -44,12 +44,12 @@ export default function Hero() {
             Our Competencies
           </motion.a>
           <motion.a
-            href="/about"
+            href="/login"
             className="btn btn-secondary"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
           >
-            Learn More
+            LMS Portal
           </motion.a>
         </motion.div>
 

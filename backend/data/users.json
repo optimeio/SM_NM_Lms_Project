@@ -21,7 +21,8 @@
     "district": "Mayiladuthurai",
     "role": "student",
     "assignedCourses": [
-      "NTEDU0001"
+      "NTEDU0001",
+      "TSMG2026IOT"
     ],
     "course_unique_code": "NTEDU0001"
   }

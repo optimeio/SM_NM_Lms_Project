@@ -13,31 +13,28 @@ export default function Navbar() {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  const navLinks = [
-    { name: 'Home', path: '/' },
-    { name: 'About', path: '/about' },
-    { name: 'Contact', path: '/contact' },
-  ];
-
+  const navLinks = [];
   if (user) {
     if (user.email === 'admin@smgroups.com' || user.email === 'thesmgroups@gmail.com') {
       navLinks.push({ name: 'Admin Portal', path: '/admin' });
     } else {
       navLinks.push({ name: 'Dashboard', path: '/dashboard' });
     }
+  } else {
+    navLinks.push({ name: 'Home', path: '/' });
   }
 
   const isActive = (path) => location.pathname === path;
 
   const handleLogout = () => {
     localStorage.removeItem('user');
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   return (
     <nav className="navbar">
       <div className="navbar-container">
-        <Link to="/" className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <Link to={user ? (user.email === 'admin@smgroups.com' || user.email === 'thesmgroups@gmail.com' ? '/admin' : '/dashboard') : '/'} className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img
             src={tnskillLogo}
             alt="TNSkill Logo"
@@ -79,14 +76,9 @@ export default function Navbar() {
               </button>
             </div>
           ) : (
-            <>
-              <Link to="/login" className="btn btn-secondary">
-                Login
-              </Link>
-              <Link to="/register" className="btn btn-primary">
-                Sign Up
-              </Link>
-            </>
+            <Link to="/" className="btn btn-secondary">
+              Login
+            </Link>
           )}
         </div>
 
@@ -141,24 +133,14 @@ export default function Navbar() {
                 </button>
               </li>
             ) : (
-              <>
-                <li>
-                  <Link
-                    to="/login"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    Login
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/register"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    Sign Up
-                  </Link>
-                </li>
-              </>
+              <li>
+                <Link
+                  to="/"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Login
+                </Link>
+              </li>
             )}
           </ul>
         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   User, Lock, Eye, EyeOff, Landmark, Code2, Lightbulb, BarChart2,
@@ -16,6 +16,13 @@ export default function Login() {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (user) {
+      navigate(user.role === 'admin' ? '/admin' : '/dashboard');
+    }
+  }, [navigate]);
 
   const validate = () => {
     const newErrors = {};
@@ -74,6 +81,24 @@ export default function Login() {
           const data = await res.json();
           if (data.success) {
             localStorage.setItem('user', JSON.stringify(data.user));
+            try {
+              const tokenRes = await fetch('/lms/client/token/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  client_key: '59e8bb42f89d5ee93ff466be97022427',
+                  client_secret: 'f7a761767124aef8b904c49b52a555d6'
+                })
+              });
+              if (tokenRes.ok) {
+                const tokenData = await tokenRes.json();
+                if (tokenData.access) {
+                  localStorage.setItem('token', tokenData.access);
+                }
+              }
+            } catch (tokenErr) {
+              console.warn('Could not generate client token:', tokenErr);
+            }
             navigate(data.user.role === 'admin' ? '/admin' : '/dashboard');
             return;
           }
@@ -100,6 +125,25 @@ export default function Login() {
         }
         localStorage.setItem('user', JSON.stringify(foundUser));
         
+        try {
+          const tokenRes = await fetch('/lms/client/token/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_key: '59e8bb42f89d5ee93ff466be97022427',
+              client_secret: 'f7a761767124aef8b904c49b52a555d6'
+            })
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            if (tokenData.access) {
+              localStorage.setItem('token', tokenData.access);
+            }
+          }
+        } catch (tokenErr) {
+          console.warn('Could not generate client token:', tokenErr);
+        }
+
         // Sync user to backend in background if missing
         try {
           fetch('/api/auth/register', {
@@ -131,7 +175,7 @@ export default function Login() {
         
         {/* Logos */}
         <div className="logos-wrapper">
-          <img src={tnskillLogo} alt="TNSkill" className="nm-logo" style={{ height: '55px', width: 'auto', objectFit: 'contain' }} />
+          <img src={tnskillLogo} alt="TNSkill" className="nm-logo" />
           <div className="vertical-divider" />
           <img src={smLogo} alt="SM Groups" className="sm-logo" />
           <a href="#login-section" className="mobile-header-login-btn">
@@ -276,31 +320,20 @@ export default function Login() {
               {errors.password && <span className="input-error-msg">{errors.password}</span>}
             </div>
 
-            <div className="forgot-password-link">
-              <Link to="/forgot-password">Forgot Password?</Link>
+            <div className="forgot-password-link" style={{ textAlign: 'right', marginBottom: '14px' }}>
+              <span 
+                style={{ color: 'var(--primary-red)', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+                onClick={() => alert("Please contact your College Administrator or TNSDC Coordinator to reset your password.")}
+              >
+                Forgot Password?
+              </span>
             </div>
 
             <button type="submit" disabled={isSubmitting} className="btn-login-submit">
               {isSubmitting ? 'Logging in...' : 'Login'}
             </button>
 
-            <div className="login-or-divider"><span>OR</span></div>
 
-            <button 
-              type="button" 
-              className="btn-college-login"
-              onClick={() => {
-                setFormData({ username: 'thesmgroups@gmail.com', password: 'TSMGPVT@2026' });
-              }}
-            >
-              <Landmark size={17} style={{ marginRight: '8px' }} />
-              <span>Login with College ID / Admin</span>
-            </button>
-
-            <div className="register-redirect">
-              <span>New Student? </span>
-              <Link to="/register" className="register-link">Register Here</Link>
-            </div>
           </form>
         </div>
       </div>

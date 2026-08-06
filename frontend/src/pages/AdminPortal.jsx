@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/AdminPortal.css';
+import smLogo from '../assets/sm_logo.png';
+import tnskillLogo from '../assets/tnskill_logo.png';
 
 const API = '/api/admin';
 
@@ -98,7 +100,6 @@ const MENU_ITEMS = [
   { name: 'Colleges', icon: Icons.Colleges },
   { name: 'My Courses', icon: Icons.Courses },
   { name: 'Certificates', icon: Icons.Certificate },
-  { name: 'API & Tokens', icon: Icons.Key },
   { name: 'Profile', icon: Icons.Profile },
 ];
 
@@ -138,7 +139,7 @@ export default function AdminPortal() {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user'));
     if (!user || (user.email !== 'admin@smgroups.com' && user.email !== 'thesmgroups@gmail.com')) {
-      navigate('/login');
+      navigate('/');
       return;
     }
     fetchStudents();
@@ -147,35 +148,11 @@ export default function AdminPortal() {
   }, [navigate]);
 
   const fetchCourses = async () => {
-    // 1. Retrieve created courses stored in localStorage
-    const localCoursesRaw = localStorage.getItem('createdCourses');
-    const localCourses = localCoursesRaw ? JSON.parse(localCoursesRaw) : [];
-    const localMapped = localCourses.map(c => ({
-      _id: c.course_unique_code || c.id || `local-${Date.now()}`,
-      id: c.course_unique_code || c.id,
-      course_unique_code: c.course_unique_code || c.id,
-      title: c.course_name || c.title,
-      category: c.category || 'General',
-      instructor: c.instructor || 'Instructor',
-      content: c.course_description || c.content || '',
-      image: c.course_image_url || c.image || '',
-      videos: c.videos || [],
-      ppts: c.ppts || [],
-      midQuiz: c.midQuiz,
-      finalQuiz: c.finalQuiz,
-      is_active: true,
-      studentsEnrolled: 0,
-      rating: 4.8
-    }));
-
     try {
       const res = await fetch('/lms/client/courses/');
-      if (!res.ok) {
-        setCourses(localMapped);
-        return;
-      }
+      if (!res.ok) { setCourses([]); return; }
       let data = {};
-      try { data = await res.json(); } catch { setCourses(localMapped); return; }
+      try { data = await res.json(); } catch { setCourses([]); return; }
       if (data.success || data.courses_list) {
         const list = data.courses_list || data.courses || [];
         const apiMapped = list.map(c => ({
@@ -195,23 +172,21 @@ export default function AdminPortal() {
           studentsEnrolled: c.studentsEnrolled || 0,
           rating: c.rating || 4.8
         }));
-
-        // Combine local storage courses & API courses without duplicate IDs
-        const existingCodes = new Set(apiMapped.map(c => c.course_unique_code || c.title));
-        const uniqueLocal = localMapped.filter(c => !existingCodes.has(c.course_unique_code || c.title));
-        setCourses([...uniqueLocal, ...apiMapped]);
+        // Clear stale localStorage cache to prevent duplicates
+        localStorage.removeItem('createdCourses');
+        setCourses(apiMapped);
       } else {
-        setCourses(localMapped);
+        setCourses([]);
       }
     } catch {
-      setCourses(localMapped);
+      setCourses([]);
     }
   };
 
   // API Token Generator states
   const [tokenInput, setTokenInput] = useState({
-    client_key: 'lms_client_key_2026',
-    client_secret: 'lms_client_secret_2026'
+    client_key: '59e8bb42f89d5ee93ff466be97022427',
+    client_secret: 'f7a761767124aef8b904c49b52a555d6'
   });
   const [tokenResult, setTokenResult] = useState(null);
   const [isGeneratingToken, setIsGeneratingToken] = useState(false);
@@ -231,15 +206,13 @@ export default function AdminPortal() {
       console.warn('Could not fetch users from API, falling back to local state:', err);
     }
 
-    let progressMap = {};
+    let serverProgressList = [];
     try {
       const pRes = await fetch('/api/user/progress');
       if (pRes.ok) {
         const pData = await pRes.json();
-        if (pData.user_progress && Array.isArray(pData.user_progress)) {
-          pData.user_progress.forEach(p => {
-            if (p.user_unique_id) progressMap[p.user_unique_id.toLowerCase()] = p;
-          });
+        if (pData.success && Array.isArray(pData.user_progress)) {
+          serverProgressList = pData.user_progress;
         }
       }
     } catch {
@@ -252,16 +225,31 @@ export default function AdminPortal() {
     const storedUsersRaw = localStorage.getItem('registeredUsers');
     const localUsers = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
     
-    // Merge API users with local users by email
-    const map = new Map();
-    localUsers.forEach(u => u && u.email && map.set(u.email.toLowerCase(), u));
-    apiUsers.forEach(u => u && u.email && map.set(u.email.toLowerCase(), u));
-    const merged = Array.from(map.values()).filter(u => u.role !== 'admin').map(u => {
+    // Fallback to local storage users only if backend is empty / offline
+    const sourceUsers = apiUsers.length > 0 ? apiUsers : localUsers;
+    
+    const merged = sourceUsers.filter(u => u && u.role !== 'admin').map(u => {
       const email = u.email ? u.email.toLowerCase() : '';
-      const prog = progressMap[email] || Object.values(localProgressMap).find(p => p.user_unique_id?.toLowerCase() === email) || {};
+      const activeCode = (u.assignedCourses && u.assignedCourses[0]) || u.course_unique_code || '';
+      
+      // Try to find matching progress record from server
+      let prog = {};
+      if (activeCode) {
+        prog = serverProgressList.find(p => p.user_unique_id?.toLowerCase() === email && p.course_unique_code === activeCode) || {};
+      }
+      if (!prog.course_unique_code) {
+        prog = serverProgressList.find(p => p.user_unique_id?.toLowerCase() === email) || {};
+      }
+      
+      // Fallback to local progress map if server progress not found
+      if (!prog.course_unique_code) {
+        const progKey = `${email}_${activeCode}`;
+        prog = localProgressMap[progKey] || Object.values(localProgressMap).find(p => p.user_unique_id?.toLowerCase() === email) || {};
+      }
+
       return {
         ...u,
-        course_unique_code: prog.course_unique_code || (u.assignedCourses && u.assignedCourses[0]) || u.course_unique_code || '',
+        course_unique_code: prog.course_unique_code || activeCode || '',
         progress_percentage: (prog.progress_percentage !== undefined && prog.progress_percentage !== null) ? String(prog.progress_percentage) : "0.00",
         assessment_status: (prog.assessment_status !== undefined && prog.assessment_status !== null) ? String(prog.assessment_status) : "false",
         course_complete: (prog.course_complete !== undefined && prog.course_complete !== null) ? String(prog.course_complete) : "false",
@@ -595,27 +583,51 @@ export default function AdminPortal() {
   };
 
   const openEditCourse = (course) => {
+    const existingVideos = Array.isArray(course.videos) ? [...course.videos] : [];
+    const existingPpts = Array.isArray(course.ppts) ? [...course.ppts] : [];
+
+    // Pad to 12 slots with empty strings so slots always exist
+    while (existingVideos.length < 12) existingVideos.push('');
+    while (existingPpts.length < 12) existingPpts.push('');
+
     const modalData = { 
       mode: 'edit', 
       ...course,
       title: course.title || course.course_name || '',
       content: course.content || course.course_description || '',
       image: course.image || course.course_image_url || '',
-      videos: course.videos || [],
-      ppts: course.ppts || []
+      videos: existingVideos,
+      ppts: existingPpts,
+      videosNames: course.videosNames || [],
+      pptsNames: course.pptsNames || []
     };
 
-    // Pre-populate Mid Quiz questions if present, or fill defaults
-    if (course.midQuiz?.questions && course.midQuiz.questions.length >= 25) {
-      course.midQuiz.questions.forEach((q, idx) => {
-        modalData[`mid_q_${idx}`] = q.question || '';
-        if (q.options) {
-          q.options.forEach((opt, optIdx) => {
-            modalData[`mid_opt_${idx}_${optIdx}`] = opt || '';
-          });
+    // Pre-populate Mid Quiz questions if any exist (fix: was >=25, now >0)
+    if (course.midQuiz?.questions && course.midQuiz.questions.length > 0) {
+      // Fill all 25 slots: use saved data where available, defaults for missing
+      for (let i = 0; i < 25; i++) {
+        const q = course.midQuiz.questions[i];
+        if (q) {
+          modalData[`mid_q_${i}`] = q.question || '';
+          if (q.options && q.options.length >= 4) {
+            q.options.forEach((opt, optIdx) => {
+              modalData[`mid_opt_${i}_${optIdx}`] = opt || '';
+            });
+          } else {
+            const defQ = defaultQuestionsPool[i % defaultQuestionsPool.length];
+            [0,1,2,3].forEach(optIdx => { modalData[`mid_opt_${i}_${optIdx}`] = defQ.opts[optIdx]; });
+          }
+          modalData[`mid_correct_${i}`] = typeof q.correctAnswer === 'number' ? q.correctAnswer : 0;
+        } else {
+          const qObj = defaultQuestionsPool[i % defaultQuestionsPool.length];
+          modalData[`mid_q_${i}`] = `Mid Q#${i + 1}: ${qObj.q}`;
+          modalData[`mid_opt_${i}_0`] = qObj.opts[0];
+          modalData[`mid_opt_${i}_1`] = qObj.opts[1];
+          modalData[`mid_opt_${i}_2`] = qObj.opts[2];
+          modalData[`mid_opt_${i}_3`] = qObj.opts[3];
+          modalData[`mid_correct_${i}`] = 0;
         }
-        modalData[`mid_correct_${idx}`] = q.correctAnswer ?? 0;
-      });
+      }
     } else {
       for (let i = 0; i < 25; i++) {
         const qObj = defaultQuestionsPool[i % defaultQuestionsPool.length];
@@ -628,17 +640,31 @@ export default function AdminPortal() {
       }
     }
 
-    // Pre-populate Final Quiz questions if present, or fill defaults
-    if (course.finalQuiz?.questions && course.finalQuiz.questions.length >= 25) {
-      course.finalQuiz.questions.forEach((q, idx) => {
-        modalData[`final_q_${idx}`] = q.question || '';
-        if (q.options) {
-          q.options.forEach((opt, optIdx) => {
-            modalData[`final_opt_${idx}_${optIdx}`] = opt || '';
-          });
+    // Pre-populate Final Quiz questions if any exist (fix: was >=25, now >0)
+    if (course.finalQuiz?.questions && course.finalQuiz.questions.length > 0) {
+      for (let i = 0; i < 25; i++) {
+        const q = course.finalQuiz.questions[i];
+        if (q) {
+          modalData[`final_q_${i}`] = q.question || '';
+          if (q.options && q.options.length >= 4) {
+            q.options.forEach((opt, optIdx) => {
+              modalData[`final_opt_${i}_${optIdx}`] = opt || '';
+            });
+          } else {
+            const defQ = defaultQuestionsPool[i % defaultQuestionsPool.length];
+            [0,1,2,3].forEach(optIdx => { modalData[`final_opt_${i}_${optIdx}`] = defQ.opts[optIdx]; });
+          }
+          modalData[`final_correct_${i}`] = typeof q.correctAnswer === 'number' ? q.correctAnswer : 0;
+        } else {
+          const qObj = defaultQuestionsPool[i % defaultQuestionsPool.length];
+          modalData[`final_q_${i}`] = `Final Q#${i + 1}: ${qObj.q}`;
+          modalData[`final_opt_${i}_0`] = qObj.opts[0];
+          modalData[`final_opt_${i}_1`] = qObj.opts[1];
+          modalData[`final_opt_${i}_2`] = qObj.opts[2];
+          modalData[`final_opt_${i}_3`] = qObj.opts[3];
+          modalData[`final_correct_${i}`] = 0;
         }
-        modalData[`final_correct_${idx}`] = q.correctAnswer ?? 0;
-      });
+      }
     } else {
       for (let i = 0; i < 25; i++) {
         const qObj = defaultQuestionsPool[i % defaultQuestionsPool.length];
@@ -654,7 +680,7 @@ export default function AdminPortal() {
     setCourseModal(modalData);
   };
 
-  const saveCourse = async () => {
+  const saveCourse = async (isPublish = true) => {
     if (!courseModal.title) {
       showToast('Course name is required!', 'error');
       return;
@@ -679,8 +705,8 @@ export default function AdminPortal() {
         reference_id: courseModal.reference_id || `REF-${Date.now()}`,
         course_type: 'ONLINE',
         location: '',
-        videos: (courseModal.videos || []).map((v, i) => v || `Video #${i + 1}`),
-        ppts: (courseModal.ppts || []).map((p, i) => p || `PPT #${i + 1}`),
+        videos: (courseModal.videos || Array(12).fill('')).map((v, i) => (v && v !== `Video #${i + 1}`) ? v : (v || '')),
+        ppts: (courseModal.ppts || Array(12).fill('')).map((p, i) => (p && p !== `PPT #${i + 1}`) ? p : (p || '')),
         midQuiz: {
           title: 'Mid-Course Quiz (After Video 6) - 25 Marks',
           totalMarks: 25,
@@ -701,7 +727,6 @@ export default function AdminPortal() {
                 marks: 1
               };
             }
-            // Generate distinct, topic-tailored questions if not custom-specified
             const titleLower = (courseModal.title || '').toLowerCase();
             const isIot = titleLower.includes('iot') || titleLower.includes('embedded') || titleLower.includes('raspberry');
             const defaultQList = [
@@ -710,26 +735,19 @@ export default function AdminPortal() {
               { q: "Which bus is used for fast serial communication with sensors?", opts: ["SPI / I2C Bus", "SATA 3.0", "PCIe 4.0 x16", "DisplayPort 1.4"] },
               { q: "What GPIO voltage standard does Raspberry Pi 4 Model B use?", opts: ["3.3V Logic Level", "12V Automotive Standard", "110V AC Power Line", "5V High Power Direct Drive"] },
               { q: "Which protocol provides low-power wireless networking for IoT mesh nodes?", opts: ["Zigbee / IEEE 802.15.4", "HTTP/2 Uncompressed", "FTP Over TLS", "POP3 Mail Protocol"] },
-              { q: "What is the function of ADC (Analog-to-Digital Converter) in embedded systems?", opts: ["Convert continuous sensor voltage to digital binary values", "Amplify audio speaker signals", "Encrypt WiFi network packets", "Step-down AC supply to DC"] },
-              { q: "Which sensor measures relative humidity and environmental temperature?", opts: ["DHT22 / DHT11", "MPU6050 Gyroscope", "HC-SR04 Ultrasonic Sensor", "MQ-2 Gas Sensor"] },
-              { q: "What is Edge Computing in the context of IoT deployment?", opts: ["Processing sensor data locally near the data source", "Storing all logs exclusively in remote cloud servers", "Using curved monitor displays for dashboards", "Routing network data through satellite relays"] },
-              { q: "Which wireless frequency band is standard for LoRaWAN long-range communications?", opts: ["868 MHz / 915 MHz", "5.8 GHz WiFi", "24 GHz Radar", "60 GHz WiGig"] },
-              { q: "What type of memory is non-volatile and retains microcontroller firmware code?", opts: ["Flash Memory / EEPROM", "SRAM Cache", "DDR4 System RAM", "CPU Registers"] }
+              { q: "Which programming language is predominantly used in writing Arduino firmware?", opts: ["C / C++", "Python 3.12", "HTML5 / CSS3", "Java Enterprise Edition"] },
+              { q: "What is the key security vulnerability in unencrypted IoT sensor transmission?", opts: ["Man-in-the-Middle eavesdropping", "Hard drive spindle failure", "Power supply frequency drift", "Physical LCD display pixel burn-in"] },
+              { q: "Which low-power cellular standard is designed specifically for IoT devices?", opts: ["NB-IoT (Narrowband IoT)", "5G mmWave High Bandwidth", "CDMA 1xRTT", "Satellite TV Broadcast"] },
+              { q: "What does the 'S' stand for in HTTPS?", opts: ["Secure", "Simple", "Standard", "Synchronous"] },
+              { q: "Which device is typically used to convert analog signals to digital format in microcontrollers?", opts: ["ADC (Analog-to-Digital Converter)", "DAC", "DMA Controller", "Crystal Oscillator"] }
             ];
-            const defaultGenList = [
-              { q: "Which data structure operates on a Last-In, First-Out (LIFO) principle?", opts: ["Stack", "Queue", "Linked List", "Binary Tree"] },
-              { q: "What is the time complexity of searching an element in a balanced Binary Search Tree?", opts: ["O(log N)", "O(N^2)", "O(1)", "O(N log N)"] },
-              { q: "In Database Management Systems, what does the 'A' in ACID properties stand for?", opts: ["Atomicity", "Availability", "Authentication", "Abstraction"] },
-              { q: "Which OSI layer is responsible for end-to-end packet routing and IP addressing?", opts: ["Network Layer (Layer 3)", "Physical Layer (Layer 1)", "Application Layer (Layer 7)", "Data Link Layer (Layer 2)"] },
-              { q: "What is the main purpose of Version Control Systems like Git?", opts: ["Track source code changes and collaborate across branches", "Automate CPU clock speed adjustment", "Render 3D graphics models", "Compile Java bytecode"] }
-            ];
-            const pool = isIot ? defaultQList : defaultGenList;
-            const item = pool[i % pool.length];
+
+            const qObj = isIot ? defaultQList[i % defaultQList.length] : defaultQuestionsPool[i % defaultQuestionsPool.length];
             return {
               id: i + 1,
-              question: `Mid-Exam Q${i + 1}: ${item.q}`,
-              options: item.opts,
-              correctAnswer: i % 4,
+              question: qObj.q,
+              options: qObj.opts,
+              correctAnswer: 0,
               marks: 1
             };
           })
@@ -757,26 +775,24 @@ export default function AdminPortal() {
             const titleLower = (courseModal.title || '').toLowerCase();
             const isIot = titleLower.includes('iot') || titleLower.includes('embedded') || titleLower.includes('raspberry');
             const defaultQList = [
-              { q: "What is the purpose of PWM (Pulse Width Modulation) in GPIO outputs?", opts: ["Vary effective voltage supply to control motor speed & LED brightness", "Increase network upload bandwidth", "Encrypt serial data transmissions", "Measure barometric pressure"] },
-              { q: "Which layer of the IoT 7-layer architecture handles sensor data acquisition?", opts: ["Perception / Sensing Layer", "Application Layer", "Business Layer", "Middleware Layer"] },
-              { q: "What does CoAP (Constrained Application Protocol) run on top of?", opts: ["UDP Protocol", "TCP Protocol", "BGP Routing", "ICMP Ping"] },
-              { q: "Which Linux command is used to inspect active serial ports connected to Raspberry Pi?", opts: ["ls /dev/tty*", "ipconfig /all", "netstat -an", "systemctl status gpio"] },
-              { q: "What is the primary function of an Optocoupler in industrial embedded circuits?", opts: ["Electrical isolation between high-voltage circuits and microcontrollers", "Audio signal synthesis", "Battery charging management", "Wireless RF signal amplification"] }
+              { q: "Which architecture is primarily used in modern low-power microcontrollers like ARM Cortex-M?", opts: ["RISC (Reduced Instruction Set)", "CISC Complex Instruction", "VLIW Very Long Instruction Word", "Quantum Qubit Architecture"] },
+              { q: "What does edge computing resolve in high-scale IoT networks?", opts: ["Reduces cloud latency & bandwidth usage", "Decreases device battery life", "Prevents visual light reflection", "Increases database normalization overhead"] },
+              { q: "Which protocol provides reliable request/response over UDP for constrained nodes?", opts: ["CoAP (Constrained Application Protocol)", "FTP over TLS", "WebSocket Protocol", "HTTP/1.1 Keep-Alive"] },
+              { q: "What is the typical range of a LoRaWAN sensor network in suburban areas?", opts: ["2 to 5 Kilometers", "10 to 50 Meters", "500 to 1000 Kilometers", "100 to 300 Millimeters"] },
+              { q: "Which component acts as an electronic switch to control high-power DC loads from GPIO?", opts: ["MOSFET / Transistor", "Resistor Divider", "Ceramic Capacitor", "Piezoelectric Buzzer"] },
+              { q: "What does OTA stand for in the context of IoT device management?", opts: ["Over-The-Air firmware updates", "One-Time Authentication", "Optical Transmission Alignment", "Output Transfer Automation"] },
+              { q: "Which communication model is used by MQTT for messaging between clients?", opts: ["Publish-Subscribe Model", "Peer-to-Peer Direct Socket", "Request-Response HTTP", "Master-Slave Modbus"] },
+              { q: "What is the primary function of a watchdog timer in embedded systems?", opts: ["Resets system on software hang or freeze", "Displays real-time system clock", "Controls LCD backlight brightness", "Monitors power supply battery voltage"] },
+              { q: "Which standard governs Wi-Fi communication in the 2.4GHz/5GHz bands?", opts: ["IEEE 802.11", "IEEE 802.3 Ethernet", "IEEE 802.15.1 Bluetooth", "IEEE 802.15.4 Zigbee"] },
+              { q: "What is the purpose of a pull-up resistor on a digital input pin?", opts: ["Ensures a stable HIGH state when floating", "Amplify voltage output to high levels", "Filters out high-frequency radio noise", "Increases current flowing into GPIO"] }
             ];
-            const defaultGenList = [
-              { q: "Which HTTP status code indicates a successful resource creation?", opts: ["201 Created", "404 Not Found", "500 Internal Server Error", "302 Found Redirect"] },
-              { q: "What is the primary role of a Load Balancer in web architecture?", opts: ["Distribute incoming network traffic across multiple servers", "Encrypt database tables on disk", "Generate CSS styling themes", "Compress JPEG images"] },
-              { q: "In Object-Oriented Programming, what is Polymorphism?", opts: ["Ability of different classes to respond to the same method call in unique ways", "Storing data in constant variables", "Compiling code to assembly", "Running multiple OS virtual machines"] },
-              { q: "Which algorithm is commonly used for finding the shortest path in a weighted graph?", opts: ["Dijkstra's Algorithm", "Bubble Sort", "Binary Search", "K-Means Clustering"] },
-              { q: "What is the function of DNS (Domain Name System) in internet networking?", opts: ["Translate domain names into IP addresses", "Protect servers against power surges", "Manage browser cookies", "Render HTML DOM elements"] }
-            ];
-            const pool = isIot ? defaultQList : defaultGenList;
-            const item = pool[i % pool.length];
+
+            const qObj = isIot ? defaultQList[i % defaultQList.length] : defaultQuestionsPool[i % defaultQuestionsPool.length];
             return {
               id: i + 1,
-              question: `Final Assessment Q${i + 1}: ${item.q}`,
-              options: item.opts,
-              correctAnswer: i % 4,
+              question: qObj.q,
+              options: qObj.opts,
+              correctAnswer: 0,
               marks: 1
             };
           })
@@ -790,8 +806,7 @@ export default function AdminPortal() {
           { objective: "Master functional programming and framework techniques" },
           { objective: "Build high-performance, scalable web and embedded applications" }
         ],
-        videos: (courseModal.videos || []).map((v, i) => v || `Video #${i + 1}`),
-        ppts: (courseModal.ppts || []).map((p, i) => p || `PPT #${i + 1}`),
+        videosNames: courseModal.videosNames || [],
         pptsNames: courseModal.pptsNames || []
       };
 
@@ -809,7 +824,8 @@ export default function AdminPortal() {
         bodyString = JSON.stringify(sanitizedPayload);
       }
 
-      const res = await fetch('/lms/client/course/publish/', {
+      const endpoint = isPublish ? '/lms/client/course/publish/' : '/lms/client/course/save-draft/';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: bodyString
@@ -843,30 +859,55 @@ export default function AdminPortal() {
       }
 
       // Auto-assign course to target scope upon publish (defaults to all students)
-      const targetScope = courseModal.autoAssignTo || 'all';
-      if (targetScope !== 'none') {
-        handleBulkAssignCourse(finalSavedCourse, {
-          targetMode: targetScope,
-          targetCollege: courseModal.autoAssignCollege || 'ALL',
-          targetDept: courseModal.autoAssignDept || 'ALL',
-          selectedStudentEmails: courseModal.autoAssignStudents || []
-        });
+      if (isPublish) {
+        const targetScope = courseModal.autoAssignTo || 'all';
+        if (targetScope !== 'none') {
+          handleBulkAssignCourse(finalSavedCourse, {
+            targetMode: targetScope,
+            targetCollege: courseModal.autoAssignCollege || 'ALL',
+            targetDept: courseModal.autoAssignDept || 'ALL',
+            selectedStudentEmails: courseModal.autoAssignStudents || []
+          });
+        }
       }
 
       if (res.ok || data.status || data.success) {
-        showToast('✅ Course published & assigned to target students successfully!');
+        showToast(isPublish ? '✅ Course published & assigned successfully!' : '💾 Course saved as draft successfully!');
         fetchCourses();
         setCourseModal(null);
       } else {
-        showToast('Saved locally & assigned to students!');
+        showToast(isPublish ? 'Saved locally!' : 'Saved draft locally!');
         fetchCourses();
         setCourseModal(null);
       }
     } catch (err) {
-      console.error('Publish error handled:', err);
-      showToast('Course published successfully!');
+      console.error('Save/Publish error handled:', err);
+      showToast(isPublish ? 'Course published successfully!' : 'Course draft saved successfully!');
       fetchCourses();
       setCourseModal(null);
+    }
+  };
+
+  const handleQuickPublish = async (course) => {
+    try {
+      const res = await fetch('/lms/client/course/publish/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...course,
+          course_unique_code: course.course_unique_code || course.id
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok || data.status || data.success) {
+        showToast('🚀 Course published successfully!');
+        fetchCourses();
+      } else {
+        showToast('Failed to publish course.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error publishing course.', 'error');
     }
   };
 
@@ -1076,7 +1117,7 @@ export default function AdminPortal() {
 
   const handleSignOut = () => {
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   /* ---- Student Table (reused in Students tab and College drill-down) ---- */
@@ -1453,32 +1494,43 @@ export default function AdminPortal() {
 
                   return (
                     <div key={course._id || course.id} className="course-card">
-                      <div className="course-card-image-wrapper" style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '8px', marginBottom: '12px', background: '#0f172a' }}>
+                      <div className="course-card-image-wrapper" style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '8px', marginBottom: '12px', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <img 
                           src={course.image || course.course_image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60'} 
                           alt={course.title} 
                           className="course-card-img" 
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
                           onError={(e) => {
                             e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60';
                           }}
                         />
                       </div>
-                      <h4>{course.title}</h4>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <h4 style={{ margin: 0 }}>{course.title}</h4>
+                        {!course.is_active && (
+                          <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: '#ffe4e6', color: '#e11d48', fontWeight: 700, border: '1px solid #fecdd3' }}>DRAFT</span>
+                        )}
+                      </div>
                       <p className="course-card-desc" style={{ fontSize: '13px', color: '#64748b', margin: '8px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {course.content}
                       </p>
                       <p style={{ fontWeight: 600, fontSize: '12.5px', color: '#10b981' }}>
-                        {enrolledCount} student{enrolledCount !== 1 ? 's' : ''} enrolled
+                        {course.is_active ? `${enrolledCount} student${enrolledCount !== 1 ? 's' : ''} enrolled` : 'Not visible to students'}
                       </p>
                       <div className="course-card-badges" style={{ display: 'flex', gap: '5px', margin: '8px 0', flexWrap: 'wrap' }}>
                         {course.ppt && <span className="admin-badge green" style={{ fontSize: '11px' }}>Slides</span>}
                         {course.video && <span className="admin-badge blue" style={{ fontSize: '11px' }}>Video</span>}
                       </div>
                       <div className="course-card-actions" style={{ display: 'flex', gap: '6px', width: '100%', marginTop: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '10px', flexWrap: 'wrap' }}>
-                        <button className="action-btn assign" style={{ flex: '1 1 100%', padding: '7px', fontWeight: 700, fontSize: '12px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px' }} onClick={() => openAssignCourseToStudents(course)}>
-                          {Icons.Assign} Assign to Students
-                        </button>
+                        {course.is_active ? (
+                          <button className="action-btn assign" style={{ flex: '1 1 100%', padding: '7px', fontWeight: 700, fontSize: '12px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px' }} onClick={() => openAssignCourseToStudents(course)}>
+                            {Icons.Assign} Assign to Students
+                          </button>
+                        ) : (
+                          <button className="action-btn assign" style={{ flex: '1 1 100%', padding: '7px', fontWeight: 700, fontSize: '12px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onClick={() => handleQuickPublish(course)}>
+                            🚀 Publish Course
+                          </button>
+                        )}
                         <button className="action-btn edit" style={{ flex: 1, padding: '6px' }} onClick={() => openEditCourse(course)}>{Icons.Edit} Edit</button>
                         <button className="action-btn delete" style={{ flex: 1, padding: '6px' }} onClick={() => setDeleteCourseModal(course)}>{Icons.Trash} Delete</button>
                       </div>
@@ -1507,143 +1559,90 @@ export default function AdminPortal() {
 
 
       case 'Certificates':
-        return (
-          <>
-            <div className="admin-toolbar">
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>Certificates</div>
-              <button className="admin-csv-btn" onClick={() => downloadCSV([{ Status: 'No certificates issued' }], 'certificates.csv')}>
-                {Icons.Download} Export CSV
-              </button>
-            </div>
-            <div className="admin-content-card">
-              <div className="admin-empty-state">
-                <div className="empty-icon">{Icons.Certificate}</div>
-                <h4>No certificates issued</h4>
-                <p>Certificates will appear here after course completions.</p>
-              </div>
-            </div>
-          </>
-        );
+        {
+          const certStudents = (students || []).map(s => {
+            const isIssued = s.certificate_issued === 'true' || s.certificate_issued === true || s.certificate_issued === 'Issued' || s.course_complete === 'true' || Boolean(s.finalQuizPassed);
+            return {
+              studentName: s.fullName || s.name || 'Student',
+              email: s.email || 'N/A',
+              college: s.college || 'ANNA UNIVERSITY',
+              department: s.department || 'ECE / CSE',
+              course: s.course_name || 'IOT Architecture & Embedded Systems',
+              courseCode: s.course_unique_code || 'NTEDU0001',
+              status: isIssued ? 'Issued' : 'Pending Quiz Completion',
+              issuedDate: s.certificate_issued_at ? new Date(s.certificate_issued_at).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')
+            };
+          });
 
-      case 'API & Tokens':
-        return (
-          <div className="admin-content-card">
-            <h3>LMS Client API Credentials & JWT Token Generator</h3>
-            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>
-              Generate LMS client access & refresh tokens via backend route <code>POST /lms/client/token/</code> using client credentials.
-            </p>
-
-            <form onSubmit={handleGenerateToken} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>client_key</label>
-                <input
-                  type="text"
-                  value={tokenInput.client_key}
-                  onChange={e => setTokenInput(prev => ({ ...prev, client_key: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', fontFamily: 'monospace' }}
-                  required
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>client_secret</label>
-                <input
-                  type="text"
-                  value={tokenInput.client_secret}
-                  onChange={e => setTokenInput(prev => ({ ...prev, client_secret: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', fontFamily: 'monospace' }}
-                  required
-                />
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <button
-                  type="submit"
-                  disabled={isGeneratingToken}
-                  style={{
-                    background: '#800020',
-                    color: '#ffffff',
-                    border: 'none',
-                    padding: '12px 24px',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
+          return (
+            <>
+              <div className="admin-toolbar">
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>Certificates Management ({certStudents.length})</div>
+                <button 
+                  className="admin-csv-btn" 
+                  onClick={() => downloadCSV(certStudents.map(c => ({
+                    Student: c.studentName,
+                    Email: c.email,
+                    College: c.college,
+                    Department: c.department,
+                    Course: c.course,
+                    CourseCode: c.courseCode,
+                    Status: c.status,
+                    IssuedDate: c.issuedDate
+                  })), 'student_certificates.csv')}
                 >
-                  {isGeneratingToken ? 'Generating Token...' : '🔑 Generate Access & Refresh Tokens'}
+                  {Icons.Download} Export CSV
                 </button>
               </div>
-            </form>
-
-            {tokenResult && (
-              <div style={{ marginTop: '20px', padding: '20px', borderRadius: '12px', background: tokenResult.success ? '#f0fdf4' : '#fff1f2', border: `1px solid ${tokenResult.success ? '#bbf7d0' : '#fecdd3'}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                  <span style={{ fontWeight: 700, fontSize: '15px', color: tokenResult.success ? '#166534' : '#991b1b' }}>
-                    {tokenResult.success ? '✅ Token Successfully Generated' : '❌ Request Failed'}
-                  </span>
-                  <span style={{ fontSize: '12px', background: tokenResult.success ? '#dcfce7' : '#fee2e2', color: tokenResult.success ? '#15803d' : '#b91c1c', padding: '4px 10px', borderRadius: '20px', fontWeight: 600 }}>
-                    HTTP {tokenResult.status || 500}
-                  </span>
-                </div>
-
-                {tokenResult.success && (
-                  <>
-                    <div style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '4px', textTransform: 'uppercase' }}>Access Token (Bearer)</label>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <textarea
-                          readOnly
-                          value={tokenResult.access}
-                          rows={2}
-                          style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #a7f3d0', fontFamily: 'monospace', fontSize: '12px', background: '#ffffff' }}
-                        />
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(tokenResult.access);
-                            showToast('Access Token copied!');
-                          }}
-                          style={{ padding: '8px 14px', background: '#166534', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, alignSelf: 'flex-start' }}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '4px', textTransform: 'uppercase' }}>Refresh Token</label>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <textarea
-                          readOnly
-                          value={tokenResult.refresh}
-                          rows={2}
-                          style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #a7f3d0', fontFamily: 'monospace', fontSize: '12px', background: '#ffffff' }}
-                        />
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(tokenResult.refresh);
-                            showToast('Refresh Token copied!');
-                          }}
-                          style={{ padding: '8px 14px', background: '#166534', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, alignSelf: 'flex-start' }}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-                  </>
+              <div className="admin-content-card">
+                {certStudents.length === 0 ? (
+                  <div className="admin-empty-state">
+                    <div className="empty-icon">{Icons.Certificate}</div>
+                    <h4>No certificates issued</h4>
+                    <p>Certificates will appear here after course completions.</p>
+                  </div>
+                ) : (
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Student Name</th>
+                        <th>College / Department</th>
+                        <th>Course</th>
+                        <th>Status</th>
+                        <th>Issued Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {certStudents.map((st, idx) => (
+                        <tr key={idx}>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{st.studentName}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b' }}>{st.email}</div>
+                          </td>
+                          <td>
+                            <div>{st.college}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b' }}>{st.department}</div>
+                          </td>
+                          <td>
+                            <span className="admin-badge blue">{st.courseCode}</span> {st.course}
+                          </td>
+                          <td>
+                            <span className={`admin-badge ${st.status === 'Issued' ? 'green' : 'amber'}`}>
+                              {st.status === 'Issued' ? '✓ Issued' : '⏳ In Progress'}
+                            </span>
+                          </td>
+                          <td>{st.issuedDate}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>API Payload & Response Raw JSON</label>
-                  <pre style={{ background: '#0f172a', color: '#38bdf8', padding: '12px', borderRadius: '6px', fontSize: '12px', overflowX: 'auto', margin: 0 }}>
-                    {tokenResult.responseRaw}
-                  </pre>
-                </div>
               </div>
-            )}
-          </div>
-        );
+            </>
+          );
+        }
+
+
 
       case 'Profile':
         return (
@@ -1682,13 +1681,14 @@ export default function AdminPortal() {
 
       {/* Sidebar */}
       <aside className={`admin-sidebar ${mobileSidebar ? 'open' : ''}`}>
-        <div className="admin-logo-area">
-          <div className="admin-logo-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <div className="admin-logo-area" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px', marginBottom: '32px' }}>
+          <img src={tnskillLogo} alt="TNSkill Logo" style={{ height: '40px', width: 'auto', objectFit: 'contain' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', letterSpacing: '1px' }}>POWERED BY</span>
+            <img src={smLogo} alt="SM Groups Logo" style={{ height: '24px', width: 'auto', objectFit: 'contain' }} />
           </div>
-          <div className="admin-logo-text">
-            <h2>SM GROUPS</h2>
-            <p>admin portal</p>
+          <div style={{ marginTop: '6px', background: 'linear-gradient(135deg, #722f37 0%, #C41E3A 100%)', color: '#fff', fontSize: '9px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', letterSpacing: '1.2px', textTransform: 'uppercase', boxShadow: '0 4px 10px rgba(114, 47, 55, 0.2)' }}>
+            Super Admin Portal
           </div>
         </div>
 
@@ -1719,7 +1719,7 @@ export default function AdminPortal() {
         </div>
 
         <div className="admin-sidebar-footer">
-          <button onClick={() => navigate('/login')} className="admin-back-btn">
+          <button onClick={() => navigate('/')} className="admin-back-btn">
             {Icons.Back}
             <span>Back to Login</span>
           </button>
@@ -1738,8 +1738,7 @@ export default function AdminPortal() {
               {Icons.Menu}
             </button>
             <div className="admin-header-info">
-              <h1>Admin Portal</h1>
-              <p>Manage students, courses, and institution data</p>
+              <h1>{activeTab}</h1>
             </div>
           </div>
           <div className="admin-header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -2092,11 +2091,14 @@ export default function AdminPortal() {
           <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                {courseModal.mode === 'create' ? '🚀 Create & Publish Course' : '✏ Edit & Publish Course'}
+                {courseModal.mode === 'create' ? '🚀 Create Course' : '✏ Edit Course'}
               </h2>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button className="modal-btn cancel" onClick={() => setCourseModal(null)} style={{ padding: '6px 12px', fontSize: '12px' }}>Cancel</button>
-                <button className="modal-btn save" onClick={saveCourse} style={{ padding: '7px 18px', fontSize: '13px', background: 'var(--red-primary)', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button className="modal-btn save-draft" onClick={() => saveCourse(false)} style={{ padding: '6px 12px', fontSize: '12.5px', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>
+                  💾 Save Draft
+                </button>
+                <button className="modal-btn save" onClick={() => saveCourse(true)} style={{ padding: '7px 18px', fontSize: '13px', background: 'var(--red-primary)', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   🚀 Publish Course
                 </button>
               </div>
@@ -2411,7 +2413,7 @@ export default function AdminPortal() {
                         />
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                           {[0, 1, 2, 3].map(optIdx => {
-                            const isSelected = (courseModal[`mid_correct_${qIdx}`] ?? (qIdx % 4)) === optIdx;
+                            const isSelected = (courseModal[`mid_correct_${qIdx}`] ?? 0) === optIdx;
                             return (
                               <div 
                                 key={optIdx} 
@@ -2474,7 +2476,7 @@ export default function AdminPortal() {
                         />
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                           {[0, 1, 2, 3].map(optIdx => {
-                            const isSelected = (courseModal[`final_correct_${qIdx}`] ?? (qIdx % 4)) === optIdx;
+                            const isSelected = (courseModal[`final_correct_${qIdx}`] ?? 0) === optIdx;
                             return (
                               <div 
                                 key={optIdx} 
@@ -2515,10 +2517,13 @@ export default function AdminPortal() {
                 </div>
               </div>
             </div>
-            <div className="modal-actions" style={{ marginTop: '20px', position: 'sticky', bottom: 0, background: '#ffffff', padding: '14px 0', borderTop: '1px solid #e2e8f0', zIndex: 10, display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+             <div className="modal-actions" style={{ marginTop: '20px', position: 'sticky', bottom: 0, background: '#ffffff', padding: '14px 0', borderTop: '1px solid #e2e8f0', zIndex: 10, display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button className="modal-btn cancel" onClick={() => setCourseModal(null)} style={{ padding: '10px 18px', fontSize: '13px' }}>Cancel</button>
-              <button className="modal-btn save" onClick={saveCourse} style={{ background: 'var(--red-primary)', color: '#fff', fontWeight: 700, padding: '10px 24px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🚀 Save & Publish Course
+              <button className="modal-btn save-draft" onClick={() => saveCourse(false)} style={{ background: '#f1f5f9', color: '#475569', fontWeight: 600, padding: '10px 20px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer', border: '1px solid #cbd5e1' }}>
+                💾 Save as Draft
+              </button>
+              <button className="modal-btn save" onClick={() => saveCourse(true)} style={{ background: 'var(--red-primary)', color: '#fff', fontWeight: 700, padding: '10px 24px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🚀 Publish Course
               </button>
             </div>
           </div>

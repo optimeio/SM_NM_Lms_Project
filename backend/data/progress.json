@@ -13,13 +13,35 @@
     "assessment_status": "false",
     "course_complete": "false",
     "total_score": "",
-    "updatedAt": "2026-07-31T05:34:43.233Z"
+    "updatedAt": "2026-08-04T09:50:03.718Z",
+    "_id": "6a71b4bf2ee3b5881a7acfed",
+    "__v": 0,
+    "createdAt": "2026-08-04T09:50:03.718Z"
   },
   "dhanush.glitz@gmail.com_NTEDU0001": {
     "user_unique_id": "dhanush.glitz@gmail.com",
     "course_unique_code": "NTEDU0001",
-    "progress_percentage": "17",
-    "completedVideos": 1,
+    "progress_percentage": "100",
+    "completedVideos": 12,
+    "midQuizPassed": true,
+    "midQuizScore": 24,
+    "finalQuizPassed": true,
+    "finalQuizScore": 25,
+    "certificate_issued": "true",
+    "certificate_issued_at": null,
+    "assessment_status": "true",
+    "course_complete": "true",
+    "total_score": "25/25",
+    "updatedAt": "2026-08-04T09:50:03.801Z",
+    "_id": "6a71b4bf2ee3b5881a7acfee",
+    "__v": 0,
+    "createdAt": "2026-08-04T09:50:03.801Z"
+  },
+  "dhanush.glitz@gmail.com_TSMG2026IOT": {
+    "user_unique_id": "dhanush.glitz@gmail.com",
+    "course_unique_code": "TSMG2026IOT",
+    "progress_percentage": "50",
+    "completedVideos": 5,
     "midQuizPassed": false,
     "midQuizScore": 0,
     "finalQuizPassed": false,
@@ -28,7 +50,10 @@
     "certificate_issued_at": null,
     "assessment_status": "false",
     "course_complete": "false",
-    "total_score": "",
-    "updatedAt": "2026-07-31T09:46:50.643Z"
+    "total_score": "25/25",
+    "updatedAt": "2026-08-05T10:06:24.874Z",
+    "_id": "6a72de982ee3b5881a7ad710",
+    "__v": 0,
+    "createdAt": "2026-08-05T07:00:53.695Z"
   }
 }

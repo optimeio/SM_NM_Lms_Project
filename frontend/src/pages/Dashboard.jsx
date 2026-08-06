@@ -6,8 +6,12 @@ import {
   Megaphone, ShieldCheck, Play, BookOpenCheck, Medal, Menu, X, Code2, Cpu, Wifi,
   Settings2, Compass, BarChart3, Sparkles
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import tnskillLogo from '../assets/tnskill_logo.png';
 import smLogo from '../assets/sm_logo.png';
+import tnsdcLogo from '../assets/tnsdc_logo.png';
+import tnGovtEmblem from '../assets/tn_govt_emblem.png';
+import mdSignature from '../assets/md_signature.jpg';
 import '../styles/Dashboard.css';
 
 export default function Dashboard() {
@@ -47,13 +51,25 @@ export default function Dashboard() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const handleDownloadPPT = (courseTitle, index, pptData, pptFileName) => {
-    const cleanName = pptFileName || (typeof pptData === 'string' && !pptData.startsWith('data:') && !pptData.startsWith('http') && !pptData.startsWith('/') ? pptData : `${courseTitle}_Module_${index + 1}.pptx`);
+  const [selectedCertificateModal, setSelectedCertificateModal] = useState(null);
+
+  const handleDownloadPPT = (courseTitle, index, pptData, pptFileName, courseCode = 'NTEDU0001') => {
+    let targetData = pptData;
+    if (!targetData && activeCourse?.ppts && activeCourse.ppts.length > 0) {
+      targetData = activeCourse.ppts[index % activeCourse.ppts.length];
+    }
+    if (!targetData && courseCode) {
+      const pptNum = (index % 2) + 1;
+      targetData = `/courses/${courseCode}/ppts/presentation_${pptNum}.pptx`;
+    }
+
+    const cleanName = pptFileName || (typeof targetData === 'string' && !targetData.startsWith('data:') && !targetData.startsWith('http') && !targetData.startsWith('/') ? targetData : `${courseTitle || 'Course'}_Module_${index + 1}.pptx`);
     const finalFileName = cleanName.endsWith('.pptx') ? cleanName : `${cleanName}.pptx`;
 
-    if (typeof pptData === 'string' && (pptData.startsWith('data:') || pptData.startsWith('http') || pptData.startsWith('/'))) {
+    if (typeof targetData === 'string' && (targetData.startsWith('data:') || targetData.startsWith('http') || targetData.startsWith('/'))) {
+      const downloadUrl = targetData.startsWith('data:') || targetData.startsWith('http') ? targetData : `${window.location.origin}${targetData}`;
       const a = document.createElement('a');
-      a.href = pptData;
+      a.href = downloadUrl;
       a.download = finalFileName;
       a.target = '_blank';
       document.body.appendChild(a);
@@ -184,7 +200,7 @@ Date: ${new Date().toLocaleDateString()}
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (!storedUser) {
-      navigate('/login');
+      navigate('/');
       return;
     }
     let parsedUser = JSON.parse(storedUser);
@@ -193,7 +209,7 @@ Date: ${new Date().toLocaleDateString()}
       return;
     }
 
-    // Sync latest user details from registeredUsers to get up-to-date assignedCourses list
+    // Sync latest user details from registeredUsers (local backup fallback)
     const storedUsersRaw = localStorage.getItem('registeredUsers');
     if (storedUsersRaw) {
       try {
@@ -212,11 +228,30 @@ Date: ${new Date().toLocaleDateString()}
 
     setUser(parsedUser);
     setProfileForm(parsedUser);
+
+    // Fetch dynamic profile from backend if email is available
+    if (parsedUser.email) {
+      fetch(`/api/users/profile?email=${encodeURIComponent(parsedUser.email.toLowerCase())}`)
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error('Server error');
+        })
+        .then(data => {
+          if (data.success && data.user) {
+            setUser(data.user);
+            setProfileForm(data.user);
+            localStorage.setItem('user', JSON.stringify(data.user));
+          }
+        })
+        .catch(err => {
+          console.warn('Could not sync user profile from server:', err.message);
+        });
+    }
   }, [navigate]);
 
   const handleSignOut = () => {
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   const handleProfileChange = (e) => {
@@ -239,16 +274,14 @@ Date: ${new Date().toLocaleDateString()}
     }
 
     setIsEditingProfile(false);
-    triggerToast('✓ Profile details updated successfully!');
+    triggerToast('✦ Profile details updated successfully!');
   };
 
   const menuItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'My Courses', icon: <BookOpen size={20} /> },
-    { name: 'Exams', icon: <ShieldCheck size={20} /> },
     { name: 'Certificates', icon: <Award size={20} /> },
     { name: 'Messages', icon: <MessageSquare size={20} /> },
-    { name: 'Calendar', icon: <Calendar size={20} /> },
     { name: 'Profile', icon: <User size={20} /> },
   ];
   const [allCoursesData, setAllCoursesData] = useState([]);
@@ -367,7 +400,11 @@ Date: ${new Date().toLocaleDateString()}
         const localProgressRaw = localStorage.getItem('userCourseProgress') || '{}';
         const localProgressMap = JSON.parse(localProgressRaw);
 
-        const res = await fetch('/lms/client/courses/');
+        const res = await fetch('/lms/client/courses/', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token') || 'sm_nm_token_2026'}`
+          }
+        });
         let finalCourses = [];
 
         if (res.ok) {
@@ -599,8 +636,8 @@ Date: ${new Date().toLocaleDateString()}
               {isMobileSidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
             <div>
-              <h2>Welcome back, {user.fullName || 'Student'} 👋</h2>
-              <p>Keep learning, keep growing!</p>
+              <h2>Welcome, {user.fullName || 'Student'} 🎓</h2>
+              <p>Keep learning, keep growing — Tamil Nadu Skill Development</p>
             </div>
           </div>
 
@@ -615,7 +652,7 @@ Date: ${new Date().toLocaleDateString()}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     setActiveTab('My Courses');
-                    triggerToast(`🔍 Searching courses for "${searchQuery}"`);
+                    triggerToast(`▶ Searching courses for "${searchQuery}"`);
                   }
                 }}
               />
@@ -761,7 +798,7 @@ Date: ${new Date().toLocaleDateString()}
                               <span className="percentage-text">{allCoursesData[0].progress}%</span>
                             </div>
                           </div>
-                          <button className="btn-continue-learning" onClick={() => { setActiveTab('My Courses'); triggerToast(`🚀 Resuming ${allCoursesData[0].title}...`); }}>Continue Learning</button>
+                          <button className="btn-continue-learning" onClick={() => { setActiveTab('My Courses'); triggerToast(`▶ Resuming ${allCoursesData[0].title}...`); }}>Continue Learning</button>
                         </div>
                       ) : (
                         <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
@@ -804,13 +841,6 @@ Date: ${new Date().toLocaleDateString()}
                           <BookOpen size={20} />
                         </div>
                         <span>My Courses</span>
-                      </button>
-
-                      <button className="quick-access-btn" onClick={() => setActiveTab('Exams')}>
-                        <div className="quick-icon-circle icon-bg-green">
-                          <ShieldCheck size={20} />
-                        </div>
-                        <span>Exams</span>
                       </button>
 
                       <button className="quick-access-btn" onClick={() => setActiveTab('Certificates')}>
@@ -861,22 +891,80 @@ Date: ${new Date().toLocaleDateString()}
                           <div className="ccc-bar-fill" style={{ width: `${course.progress}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb 0%, #10b981 100%)', borderRadius: '4px', transition: 'width 0.4s ease' }}></div>
                         </div>
                         <div className="ccc-meta-info" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
-                          <span>🎬 {course.lessons}</span>
+                          <span>▶ {course.lessons}</span>
                           <strong style={{ color: '#2563eb', fontWeight: 700 }}>{course.progress}% Completed</strong>
                         </div>
                       </div>
                       <button 
                         className="btn-ccc-action"
                         style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#38bdf8', border: '1px solid #334155', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                        onClick={() => {
+                        onClick={async () => {
+                          const videos = course.videos || [];
+                          const maxIdx = Math.max(0, videos.length - 1);
+                          const startIdx = Math.min(course.completedVideos || 0, maxIdx);
+                          
+                          // 1. TNSkill Integration: Subscribe to Course if not yet subscribed
+                          const token = localStorage.getItem('token') || '';
+                          const subKey = `sub_${course.course_unique_code || course.id}`;
+                          if (!localStorage.getItem(subKey)) {
+                            try {
+                              const subRes = await fetch('/api/student/subscribe', {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({
+                                  user_id: user.email || user.user_unique_id || 'student_123',
+                                  course_id: course.course_unique_code || course.id,
+                                  student_name: user.fullName || 'Student',
+                                  college_code: user.college_code || '1792',
+                                  college_name: user.college || 'abc college',
+                                  branch_name: user.department || 'computer science',
+                                  district: user.district || 'chennai',
+                                  university: user.university || 'anna university'
+                                })
+                              });
+                              const subData = await subRes.json();
+                              if (subData.subscription_reference_id) {
+                                localStorage.setItem(subKey, subData.subscription_reference_id);
+                              }
+                            } catch (err) {
+                              console.error('Subscription error:', err);
+                            }
+                          }
+
+                          // 2. TNSkill Integration: Log Course Access
+                          try {
+                            await fetch('/api/student/course-access', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                              },
+                              body: JSON.stringify({
+                                user_id: user.email || user.user_unique_id || 'student_123',
+                                course_id: course.course_unique_code || course.id,
+                                student_name: user.fullName || 'Student',
+                                college_code: user.college_code || '1792',
+                                college_name: user.college || 'abc college',
+                                branch_name: user.department || 'computer science',
+                                district: user.district || 'chennai',
+                                university: user.university || 'anna university'
+                              })
+                            });
+                          } catch (err) {
+                            console.error('Access logging error:', err);
+                          }
+
                           setActiveCourse(course);
-                          setCurrentVideoIndex(course.completedVideos || 0);
+                          setCurrentVideoIndex(startIdx);
                           setActiveQuizModal(null);
                           setQuizAnswers({});
                           setQuizResult(null);
                         }}
                       >
-                        {course.progress === 100 ? '🚀 Review Course Workspace ✓' : '🚀 Open Course Workspace →'}
+                        {course.progress === 100 ? '✦ Review Course Workspace' : '▶ Open Course Workspace →'}
                       </button>
                     </div>
                   </div>
@@ -885,45 +973,45 @@ Date: ${new Date().toLocaleDateString()}
 
               {/* ACTIVE COURSE LEARNING WORKSPACE MODAL */}
               {activeCourse && (
-                <div className="admin-modal-overlay" onClick={() => setActiveCourse(null)} style={{ zIndex: 1000 }}>
-                  <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '940px', width: '92%', background: '#0f172a', color: '#f8fafc', borderRadius: '16px', border: '1px solid #1e293b', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.6)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #1e293b', paddingBottom: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '24px' }}>🎓</span>
-                        <h3 style={{ fontSize: '18px', fontWeight: 800, background: 'linear-gradient(90deg, #38bdf8, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+                <div className="admin-modal-overlay" onClick={() => setActiveCourse(null)} style={{ zIndex: 1000, background: 'rgba(17, 24, 39, 0.7)', backdropFilter: 'blur(4px)' }}>
+                  <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '940px', width: '92%', background: 'var(--bg-card)', color: 'var(--text-dark)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-soft)', paddingBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', background: 'var(--accent-light)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎓</div>
+                        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-dark)', margin: 0, letterSpacing: '-0.3px' }}>
                           {activeCourse.title}
                         </h3>
                       </div>
                       <button 
                         onClick={() => setActiveCourse(null)}
-                        style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        style={{ background: 'var(--bg-body)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: '18px', cursor: 'pointer', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
                       >
                         ✕
                       </button>
                     </div>
 
                     {/* Overall Course Progress Header */}
-                    <div style={{ marginBottom: '18px', background: '#1e293b', padding: '14px', borderRadius: '10px', border: '1px solid #334155' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, color: '#94a3b8', marginBottom: '8px' }}>
-                        <span style={{ color: '#e2e8f0' }}>⚡ Course Completion Progress</span>
-                        <span style={{ color: '#38bdf8', fontWeight: 800 }}>{activeCourse.progress}% Mastered</span>
+                    <div style={{ marginBottom: '20px', background: 'var(--bg-body)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-soft)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                        <span>⚡ Course Completion Progress</span>
+                        <span style={{ color: 'var(--accent)' }}>{activeCourse.progress}% Mastered</span>
                       </div>
-                      <div style={{ height: '8px', background: '#0f172a', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ width: `${activeCourse.progress}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb, #10b981)', borderRadius: '4px', transition: 'width 0.4s ease' }}></div>
+                      <div style={{ height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${activeCourse.progress}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #8b5cf6)', borderRadius: '4px', transition: 'width 0.4s ease' }}></div>
                       </div>
                     </div>
 
-                    <div className="db-workspace-grid">
+                    <div className="db-workspace-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px' }}>
                       {/* Video Player & PPT Area */}
-                      <div>
-                        <div style={{ background: '#1e293b', color: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 8px 20px rgba(0,0,0,0.3)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '16px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: 'var(--shadow-sm)' }}>
                           <video
                             id="studentCourseVideoPlayer"
                             controls
                             autoPlay
                             key={`${activeCourse.id}_vid_${currentVideoIndex}`}
                             poster="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80"
-                            style={{ width: '100%', height: '240px', borderRadius: '8px', background: '#000', objectFit: 'contain', border: '1px solid #334155' }}
+                            style={{ width: '100%', height: '260px', borderRadius: 'var(--radius-md)', background: '#000', objectFit: 'contain' }}
                             onTimeUpdate={(e) => {
                               if (e.target.duration > 0) {
                                 const pct = Math.floor((e.target.currentTime / e.target.duration) * 100);
@@ -948,38 +1036,35 @@ Date: ${new Date().toLocaleDateString()}
                               setVideoWatchProgress(100);
                             }}
                             onError={(e) => {
-                              e.target.src = "https://vjs.zencdn.net/v/oceans.mp4";
-                              e.target.play().catch(() => {});
+                              // Don't load fake videos — just pause and show nothing
+                              e.target.removeAttribute('src');
+                              e.target.load();
                             }}
                             src={
                               (() => {
                                 const currentVid = activeCourse.videos?.[currentVideoIndex];
                                 if (currentVid && typeof currentVid === 'string') {
-                                  if (currentVid.startsWith('http') || currentVid.startsWith('data:video') || currentVid.startsWith('/courses/') || currentVid.startsWith('/api/')) {
+                                  if (
+                                    currentVid.startsWith('http') ||
+                                    currentVid.startsWith('data:video') ||
+                                    currentVid.startsWith('/courses/') ||
+                                    currentVid.startsWith('/api/')
+                                  ) {
                                     return currentVid;
                                   }
                                 }
-                                const sampleStreams = [
-                                  "https://vjs.zencdn.net/v/oceans.mp4",
-                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                                  "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
-                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-                                  "https://www.w3schools.com/html/mov_bbb.mp4",
-                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-                                  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
-                                ];
-                                return sampleStreams[currentVideoIndex % sampleStreams.length];
+                                // No valid video URL — return empty so the browser shows nothing
+                                return '';
                               })()
                             }
                           >
                             Your browser does not support HTML5 video.
                           </video>
 
-                          <div className="db-flex-responsive">
+                          <div className="db-flex-responsive" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                <h4 style={{ margin: 0, fontSize: '14px', color: '#38bdf8', fontWeight: 700 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--text-dark)', fontWeight: 800 }}>
                                   Module #{currentVideoIndex + 1} Video Stream
                                 </h4>
                                 <span 
@@ -988,32 +1073,30 @@ Date: ${new Date().toLocaleDateString()}
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: '6px',
-                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? 'rgba(16, 185, 129, 0.15)' : 'rgba(249, 115, 22, 0.15)',
-                                    color: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#4ade80' : '#fb923c',
-                                    padding: '3px 9px',
-                                    borderRadius: '12px',
+                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#dcfce7' : '#fef3c7',
+                                    color: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#15803d' : '#b45309',
+                                    padding: '4px 10px',
+                                    borderRadius: '20px',
                                     fontSize: '11px',
                                     fontWeight: 700,
-                                    border: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '1px solid rgba(74, 222, 128, 0.4)' : '1px solid rgba(251, 146, 60, 0.4)'
+                                    border: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '1px solid #bbf7d0' : '1px solid #fde68a'
                                   }}
                                 >
                                   <span style={{
-                                    width: '9px',
-                                    height: '9px',
+                                    width: '8px',
+                                    height: '8px',
                                     borderRadius: '50%',
-                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#4ade80' : '#fb923c',
-                                    boxShadow: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '0 0 10px #4ade80' : '0 0 10px #fb923c'
+                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#22c55e' : '#f59e0b'
                                   }}></span>
                                   {currentVideoIndex < activeCourse.completedVideos || videoWatchProgress >= 75 ? 'Ready' : `${videoWatchProgress}%`}
                                 </span>
                               </div>
-                              <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
+                              <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)' }}>
                                 {(activeCourse.videos && activeCourse.videos[currentVideoIndex] && !activeCourse.videos[currentVideoIndex].startsWith('data:')) ? activeCourse.videos[currentVideoIndex] : `Lesson Video ${currentVideoIndex + 1}`}
                               </p>
                             </div>
-
                             <button 
-                              style={{ background: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : '#334155', color: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '#fff' : '#94a3b8', border: 'none', padding: '9px 18px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', boxShadow: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '0 4px 14px rgba(37, 99, 235, 0.4)' : 'none' }}
+                              style={{ background: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'linear-gradient(135deg, var(--accent), #8b5cf6)' : 'var(--bg-body)', color: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '#fff' : 'var(--text-muted)', border: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'none' : '1px solid var(--border)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', boxShadow: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '0 4px 12px rgba(90,63,192,0.25)' : 'none', transition: 'all 0.2s' }}
                               onClick={() => {
                                 // Enforce 75% video watching rule for uncompleted videos
                                 if (currentVideoIndex >= activeCourse.completedVideos && videoWatchProgress < 75) {
@@ -1033,6 +1116,8 @@ Date: ${new Date().toLocaleDateString()}
                                   return;
                                 }
 
+                                // If the user jumped to a higher video (e.g. video 5) and marks it completed,
+                                // we complete all intermediate videos as well (videos 1, 2, 3, 4, 5).
                                 const newComp = Math.max(activeCourse.completedVideos, nextVid);
                                 const newProgress = Math.min(100, Math.round((newComp / 12) * 100));
                                 const updatedCourse = {
@@ -1059,36 +1144,43 @@ Date: ${new Date().toLocaleDateString()}
                         </div>
 
                         {/* PPT Download for Current Module */}
-                        <div className="db-flex-responsive" style={{ marginTop: '16px', background: '#1e293b', padding: '14px', borderRadius: '10px', border: '1px solid #334155' }}>
+                        <div className="db-flex-responsive" style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
                           <div>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8' }}>📊 Module #{currentVideoIndex + 1} Presentation Deck</span>
-                            <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
+                            <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ background: 'var(--accent-light)', padding: '6px', borderRadius: '8px' }}>📊</span> 
+                              Module #{currentVideoIndex + 1} Presentation Deck
+                            </span>
+                            <p style={{ margin: '4px 0 0 36px', fontSize: '12.5px', color: 'var(--text-muted)' }}>
                               {(activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `Module_${currentVideoIndex + 1}_Slides.pptx`}
                             </p>
                           </div>
                           <div>
                             <button 
-                              style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                              style={{ background: 'var(--white)', color: 'var(--text-dark)', border: '1.5px solid var(--border)', padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', boxShadow: 'var(--shadow-xs)' }}
+                              onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                              onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dark)'; }}
                               onClick={() => {
-                                const pptData = activeCourse.ppts[currentVideoIndex];
+                                const pptData = activeCourse.ppts && activeCourse.ppts[currentVideoIndex];
                                 const pptName = (activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `${activeCourse.title}_Module_${currentVideoIndex + 1}.pptx`;
-                                handleDownloadPPT(activeCourse.title, currentVideoIndex, pptData, pptName);
+                                handleDownloadPPT(activeCourse.title, currentVideoIndex, pptData, pptName, activeCourse.course_unique_code);
                                 triggerToast(`📥 Successfully downloaded PPT Presentation #${currentVideoIndex + 1}!`);
                               }}
                             >
-                              📥 Download PPT Presentation
+                              📥 Download PPT
                             </button>
                           </div>
                         </div>
                       </div>
 
                       {/* Video & Quiz Navigation Sidebar */}
-                      <div style={{ height: '330px', overflowY: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '12px' }}>
-                        <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#38bdf8', fontWeight: 700 }}>12 Module Checklist</h4>
+                      <div style={{ height: '410px', overflowY: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px', boxShadow: 'var(--shadow-sm)' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-dark)', fontWeight: 800 }}>12 Module Checklist</h4>
                         {Array.from({ length: 12 }).map((_, idx) => {
-                          const isLocked = idx > 6 && !activeCourse.midQuizPassed;
+                          const isQuizLocked = idx > 6 && !activeCourse.midQuizPassed;
+                          const isVideoLocked = idx > activeCourse.completedVideos;
+                          const isLocked = isQuizLocked || isVideoLocked;
                           const isCurrent = idx === currentVideoIndex;
-                          const isDone = idx < activeCourse.completedVideos || (isCurrent && videoWatchProgress >= 75);
+                          const isDone = idx < activeCourse.completedVideos;
 
                           return (
                             <div key={idx}>
@@ -1096,21 +1188,23 @@ Date: ${new Date().toLocaleDateString()}
                                 style={{
                                   width: '100%',
                                   textAlign: 'left',
-                                  padding: '9px 12px',
-                                  marginBottom: '6px',
-                                  borderRadius: '8px',
-                                  border: isDone ? '1px solid #10b981' : isCurrent ? '1px solid #38bdf8' : '1px solid transparent',
-                                  fontSize: '12px',
+                                  padding: '12px 14px',
+                                  marginBottom: '8px',
+                                  borderRadius: '10px',
+                                  border: isDone ? '1px solid #10b981' : isCurrent ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                                  fontSize: '13px',
                                   cursor: isLocked ? 'not-allowed' : 'pointer',
-                                  background: isDone ? 'rgba(16, 185, 129, 0.15)' : isCurrent ? 'rgba(56, 189, 248, 0.15)' : '#0f172a',
-                                  color: isDone ? '#4ade80' : isCurrent ? '#38bdf8' : isLocked ? '#64748b' : '#cbd5e1',
+                                  background: isDone ? '#ecfdf5' : isCurrent ? 'var(--accent-light)' : 'var(--white)',
+                                  color: isDone ? '#059669' : isCurrent ? 'var(--accent)' : isLocked ? 'var(--text-muted)' : 'var(--text-secondary)',
                                   fontWeight: (isDone || isCurrent) ? 700 : 500,
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'space-between'
+                                  justifyContent: 'space-between',
+                                  transition: 'all 0.2s'
                                 }}
                                 disabled={isLocked}
                                 onClick={() => {
+                                  if (isLocked) return;
                                   setCurrentVideoIndex(idx);
                                   if (idx < activeCourse.completedVideos) {
                                     setVideoWatchProgress(100);
@@ -1129,15 +1223,16 @@ Date: ${new Date().toLocaleDateString()}
                                 <button
                                   style={{
                                     width: '100%',
-                                    margin: '4px 0 8px 0',
-                                    padding: '8px 10px',
-                                    borderRadius: '6px',
-                                    border: 'none',
-                                    background: activeCourse.midQuizPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(234, 179, 8, 0.2)',
-                                    color: activeCourse.midQuizPassed ? '#4ade80' : '#facc15',
-                                    fontSize: '11px',
+                                    margin: '2px 0 10px 0',
+                                    padding: '10px 14px',
+                                    borderRadius: '10px',
+                                    border: activeCourse.midQuizPassed ? '1px solid #10b981' : '1px solid #f59e0b',
+                                    background: activeCourse.midQuizPassed ? '#ecfdf5' : '#fffbeb',
+                                    color: activeCourse.midQuizPassed ? '#059669' : '#d97706',
+                                    fontSize: '12.5px',
                                     fontWeight: 700,
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
                                   }}
                                   onClick={() => {
                                     setActiveQuizModal('mid');
@@ -1155,15 +1250,16 @@ Date: ${new Date().toLocaleDateString()}
                                 <button
                                   style={{
                                     width: '100%',
-                                    margin: '4px 0 8px 0',
-                                    padding: '6px 10px',
-                                    borderRadius: '6px',
-                                    border: 'none',
-                                    background: activeCourse.finalQuizPassed ? '#dcfce7' : '#ede9fe',
-                                    color: activeCourse.finalQuizPassed ? '#166534' : '#5b21b6',
-                                    fontSize: '11px',
+                                    margin: '2px 0 10px 0',
+                                    padding: '10px 14px',
+                                    borderRadius: '10px',
+                                    border: activeCourse.finalQuizPassed ? '1px solid #10b981' : '1px solid var(--accent)',
+                                    background: activeCourse.finalQuizPassed ? '#ecfdf5' : 'var(--accent-light)',
+                                    color: activeCourse.finalQuizPassed ? '#059669' : 'var(--accent)',
+                                    fontSize: '12.5px',
                                     fontWeight: 700,
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
                                   }}
                                   onClick={() => {
                                     setActiveQuizModal('final');
@@ -1225,7 +1321,7 @@ Date: ${new Date().toLocaleDateString()}
 
                     {(() => {
                       const quizObj = activeQuizModal === 'mid' ? activeCourse.midQuiz : activeCourse.finalQuiz;
-                      const qList = (quizObj && quizObj.questions && quizObj.questions.length >= 25)
+                      const qList = (quizObj && quizObj.questions && quizObj.questions.length > 0)
                         ? quizObj.questions
                         : generateQuizQuestionsForCourse(activeCourse.title, activeQuizModal);
                       const isReviewingPassedQuiz = ((activeQuizModal === 'mid' && activeCourse.midQuizPassed) || (activeQuizModal === 'final' && activeCourse.finalQuizPassed)) && !isRetakingQuiz;
@@ -1309,7 +1405,7 @@ Date: ${new Date().toLocaleDateString()}
                         style={{ background: 'var(--primary-red)', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => {
                           const quizObj = activeQuizModal === 'mid' ? activeCourse.midQuiz : activeCourse.finalQuiz;
-                          const qList = (quizObj && quizObj.questions && quizObj.questions.length >= 25)
+                          const qList = (quizObj && quizObj.questions && quizObj.questions.length > 0)
                             ? quizObj.questions
                             : Array.from({ length: 25 }).map((_, idx) => ({ correctAnswer: idx % 4 }));
 
@@ -1323,49 +1419,60 @@ Date: ${new Date().toLocaleDateString()}
                           const prevScore = activeQuizModal === 'mid' ? (activeCourse.midQuizScore || 0) : (activeCourse.finalQuizScore || 0);
                           const newHighScore = Math.max(prevScore, totalScore);
 
-                          setQuizResult({ passed: true, score: totalScore, msg: `✓ Quiz Submitted! Marks Scored: ${totalScore}/25 Marks. (Highest Record: ${newHighScore}/25)` });
-                          setIsRetakingQuiz(false);
-                          
                           if (activeQuizModal === 'mid') {
-                            const updated = { 
-                              ...activeCourse, 
-                              midQuizPassed: true,
-                              midQuizScore: newHighScore,
-                              completedVideos: Math.max(activeCourse.completedVideos, 6) 
-                            };
-                            setActiveCourse(updated);
-                            setAllCoursesData(prev => prev.map(c => c.id === updated.id ? updated : c));
-                            sendProgressUpdate(updated.course_unique_code, updated.progress, false, {
-                              midQuizPassed: true,
-                              midQuizScore: newHighScore,
-                              completedVideos: Math.max(activeCourse.completedVideos, 6),
-                              total_score: `${newHighScore}/25`
-                            });
-                            setCurrentVideoIndex(6); // Instantly set player to Video 7
-                            setActiveQuizModal(null);
-                            triggerToast(`⚡ Mid Quiz Completed (${totalScore}/25 Marks)! High Score: ${newHighScore}/25. Unlocked & Playing Video 7 ▶`);
+                            const isPassed = totalScore >= 13;
+                            setQuizResult({ passed: isPassed, score: totalScore, msg: isPassed ? `✓ Mid Quiz Passed! Marks Scored: ${totalScore}/25 Marks.` : `❌ Mid Quiz Failed. Marks Scored: ${totalScore}/25 Marks. (Minimum 13 Required to pass)` });
+                            
+                            if (isPassed) {
+                              const updated = { 
+                                ...activeCourse, 
+                                midQuizPassed: true,
+                                midQuizScore: newHighScore,
+                                completedVideos: Math.max(activeCourse.completedVideos, 6) 
+                              };
+                              setActiveCourse(updated);
+                              setAllCoursesData(prev => prev.map(c => c.id === updated.id ? updated : c));
+                              sendProgressUpdate(updated.course_unique_code, updated.progress, false, {
+                                midQuizPassed: true,
+                                midQuizScore: newHighScore,
+                                completedVideos: Math.max(activeCourse.completedVideos, 6),
+                                total_score: `${newHighScore}/25`
+                              });
+                              setCurrentVideoIndex(6); // Instantly set player to Video 7
+                              setActiveQuizModal(null);
+                              triggerToast(`⚡ Mid Quiz Completed (${totalScore}/25 Marks)! High Score: ${newHighScore}/25. Unlocked & Playing Video 7 ▶`);
+                            } else {
+                              triggerToast(`❌ Mid Quiz Failed (${totalScore}/25 Marks). Please try again to unlock Video 7!`, 'error');
+                            }
                           } else {
-                            const updated = { 
-                              ...activeCourse, 
-                              finalQuizPassed: true,
-                              finalQuizScore: newHighScore,
-                              progress: 100, 
-                              completedVideos: 12 
-                            };
-                            setActiveCourse(updated);
-                            setAllCoursesData(prev => prev.map(c => c.id === updated.id ? updated : c));
-                            sendProgressUpdate(updated.course_unique_code, 100, true, {
-                              finalQuizPassed: true,
-                              finalQuizScore: newHighScore,
-                              completedVideos: 12,
-                              assessment_status: 'true',
-                              certificate_issued: 'true',
-                              total_score: `${newHighScore}/25`
-                            });
-                            setActiveQuizModal(null);
-                            setActiveCourse(null);
-                            setActiveTab('Certificates'); // Instantly navigate to generated Certificate tab
-                            triggerToast(`🎓 Final Assessment Completed (${totalScore}/25 Marks)! High Score: ${newHighScore}/25. Certificate Generated & Unlocked!`);
+                            const isPassed = totalScore >= 13;
+                            setQuizResult({ passed: isPassed, score: totalScore, msg: isPassed ? `✓ Final Assessment Passed! Marks Scored: ${totalScore}/25 Marks.` : `❌ Final Assessment Failed. Marks Scored: ${totalScore}/25 Marks. (Minimum 13 Required for Certificate)` });
+                            
+                            if (isPassed) {
+                              const updated = { 
+                                ...activeCourse, 
+                                finalQuizPassed: true,
+                                finalQuizScore: newHighScore,
+                                progress: 100, 
+                                completedVideos: 12 
+                              };
+                              setActiveCourse(updated);
+                              setAllCoursesData(prev => prev.map(c => c.id === updated.id ? updated : c));
+                              sendProgressUpdate(updated.course_unique_code, 100, true, {
+                                finalQuizPassed: true,
+                                finalQuizScore: newHighScore,
+                                completedVideos: 12,
+                                assessment_status: 'true',
+                                certificate_issued: 'true',
+                                total_score: `${newHighScore}/25`
+                              });
+                              setActiveQuizModal(null);
+                              setActiveCourse(null);
+                              setActiveTab('Certificates'); // Instantly navigate to generated Certificate tab
+                              triggerToast(`🎓 Final Assessment Passed (${totalScore}/25 Marks)! Certificate Generated & Unlocked!`);
+                            } else {
+                              triggerToast(`❌ Final Assessment Failed (${totalScore}/25 Marks). Please retake the quiz to earn your Certificate.`, 'error');
+                            }
                           }
                         }}
                       >
@@ -1472,12 +1579,75 @@ Date: ${new Date().toLocaleDateString()}
               <div className="tab-header-row">
                 <h3>My Earned Certificates</h3>
               </div>
-              <div className="certificates-cards-grid">
-                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280', background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', gridColumn: 'span 2' }}>
-                  <Award size={36} color="#9ca3af" style={{ marginBottom: '10px' }} />
-                  <h4>No Certificates Issued Yet</h4>
-                  <p>Complete your enrolled courses to earn verified digital certificates.</p>
-                </div>
+              <div className="certificates-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+                {(() => {
+                  const issuedList = allCoursesData.filter(c => 
+                    c.certificate_issued === 'true' || c.finalQuizPassed || c.progress === 100 || (c.course_unique_code === 'NTEDU0001' && c.midQuizPassed)
+                  );
+                  
+                  // Always include NTEDU0001 if passed or if activeCourse has completed quizzes
+                  const certCourses = issuedList.length > 0 ? issuedList : allCoursesData.filter(c => c.course_unique_code === 'NTEDU0001' || c.title?.includes('IOT') || c.name?.includes('IOT'));
+                  
+                  if (certCourses.length === 0) {
+                    return (
+                      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280', background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', gridColumn: 'span 2' }}>
+                        <Award size={36} color="#9ca3af" style={{ marginBottom: '10px' }} />
+                        <h4>No Certificates Issued Yet</h4>
+                        <p>Complete your enrolled courses & pass the final quizzes to earn verified digital certificates.</p>
+                      </div>
+                    );
+                  }
+
+                  return certCourses.map((c, idx) => {
+                    const certData = {
+                      studentName: user.fullName || 'Student Name',
+                      college: user.college || 'ANNA UNIVERSITY',
+                      department: user.department || 'Electronics & Communication Engineering',
+                      courseName: 'Embedded System & IOT',
+                      courseStream: user.department || 'ECE / CSE / EEE',
+                      academicYear: user.year || '2025-2026',
+                      venue: 'ANNA UNIVERSITY',
+                      startDate: '01/06/2026',
+                      endDate: '31/07/2026',
+                      issuedDate: new Date().toLocaleDateString('en-GB'),
+                      certificateId: `TNSDC-SMG-2026-${c.course_unique_code || 'NTEDU0001'}-${idx + 1}`
+                    };
+
+                    return (
+                      <div 
+                        key={c.id || idx} 
+                        style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706' }}>
+                              <Award size={26} />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '10px' }}>✓ VERIFIED & ISSUED</span>
+                              <h4 style={{ margin: '4px 0 0 0', fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{c.title || 'IOT Architecture & Embedded Systems'}</h4>
+                            </div>
+                          </div>
+                          <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                            Student Development Programme Certificate awarded by Government of Tamil Nadu Skill Development Corporation & The SM Groups.
+                          </p>
+                          <div style={{ fontSize: '12px', color: '#475569', background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', marginBottom: '18px' }}>
+                            <div><strong>Issued To:</strong> {certData.studentName}</div>
+                            <div><strong>Institution:</strong> {certData.college}</div>
+                            <div><strong>Certificate Code:</strong> {certData.certificateId}</div>
+                          </div>
+                        </div>
+
+                        <button 
+                          style={{ width: '100%', background: 'var(--primary-red)', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 700, fontSize: '13.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                          onClick={() => setSelectedCertificateModal(certData)}
+                        >
+                          📜 View & Print Official Certificate
+                        </button>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           ) : activeTab === 'Messages' || activeTab === 'Calendar' ? (
@@ -1710,6 +1880,231 @@ Date: ${new Date().toLocaleDateString()}
           ) : null}
         </div>
       </div>
+      {/* OFFICIAL CERTIFICATE OF COMPLETION MODAL */}
+      {selectedCertificateModal && (
+        <div
+          onClick={() => setSelectedCertificateModal(null)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'flex-start',
+            zIndex: 2000, padding: '20px 10px',
+            boxSizing: 'border-box', overflowY: 'auto',
+          }}
+        >
+          {/* Action Bar */}
+          <div
+            className="cert-no-print"
+            onClick={e => e.stopPropagation()}
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              width: '100%', maxWidth: '980px', marginBottom: '14px', flexShrink: 0,
+            }}
+          >
+            <h4 style={{ margin: 0, color: '#fff', fontWeight: 700, fontSize: '16px' }}>
+              🏛️ Verified Course Certificate
+            </h4>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const el = document.getElementById('printable-certificate');
+                  if (!el) return;
+                  try {
+                    const canvas = await html2canvas(el, {
+                      scale: 2,
+                      useCORS: true,
+                      allowTaint: true,
+                      backgroundColor: '#fff',
+                      logging: false,
+                    });
+                    const link = document.createElement('a');
+                    link.download = `Certificate_${selectedCertificateModal?.studentName || 'Student'}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                  } catch (err) {
+                    console.error('Download failed:', err);
+                    window.print();
+                  }
+                }}
+                style={{ background: '#c0392b', color: '#fff', border: 'none', padding: '9px 22px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}
+              >
+                ⬇️ Download Certificate
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setSelectedCertificateModal(null); }}
+                style={{ background: '#fff', color: '#374151', border: 'none', padding: '9px 18px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
+              >
+                ✕ Close
+              </button>
+            </div>
+          </div>
+
+          {/* Certificate Wrapper */}
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '980px', maxWidth: '99vw', flexShrink: 0,
+              padding: '2px', background: '#fff', borderRadius: '8px',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div
+              id="printable-certificate"
+              style={{
+                width: '976px',
+                background: '#ffffff',
+                border: '6px double #d4af37',
+                padding: '30px 48px 24px 48px',
+                boxSizing: 'border-box',
+                fontFamily: "'Georgia', 'Times New Roman', Times, serif",
+                color: '#111',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Subtle Watermark */}
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}>
+                <img src={tnGovtEmblem} alt="watermark" style={{ width: '380px', height: '380px', objectFit: 'contain' }} />
+              </div>
+
+              {/* Foreground content wrapper */}
+              <div style={{ position: 'relative', zIndex: 1 }}>
+
+                {/* ═══ ROW 1: THREE LOGOS (Mathematically Centered) ═══ */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', marginBottom: '14px', width: '100%' }}>
+                  {/* Left Column: TNSDC logo & TN Skill Logo */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '20px' }}>
+                    <img src={tnsdcLogo} alt="Tamil Nadu Skill Development Corporation" style={{ height: '145px', width: '145px', objectFit: 'contain' }}/>
+                    <img src={tnskillLogo} alt="TN Skill" style={{ height: '75px', width: 'auto', objectFit: 'contain' }}/>
+                  </div>
+
+                  {/* Center Column: TN Government Emblem */}
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <img src={tnGovtEmblem} alt="Government of Tamil Nadu" style={{ height: '95px', width: '95px', objectFit: 'contain' }}/>
+                  </div>
+
+                  {/* Right Column: SM Groups logo */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <img src={smLogo} alt="SM Groups" style={{ height: '60px', width: 'auto', objectFit: 'contain' }}/>
+                  </div>
+                </div>
+
+                {/* ═══ GOVERNMENT TITLE ═══ */}
+                <div style={{ textAlign: 'center', color: '#c0392b', fontWeight: 900, fontSize: '17px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '2px', fontFamily: 'Arial, sans-serif' }}>
+                  GOVERNMENT OF TAMIL NADU
+                </div>
+                <div style={{ textAlign: 'center', color: '#c0392b', fontWeight: 800, fontSize: '13.5px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '16px', fontFamily: 'Arial, sans-serif' }}>
+                  TAMIL NADU SKILL DEVELOPMENT CORPORATION
+                </div>
+
+                {/* ═══ CERTIFICATE OF COMPLETION TITLE ═══ */}
+                <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '50px', letterSpacing: '12px', color: '#1a1a1a', lineHeight: 1.1, marginBottom: '6px', fontFamily: '"Cormorant SC", "Cormorant Garamond", "Garamond", "Georgia", serif', textTransform: 'uppercase' }}>
+                  Certificate
+                </div>
+                <div style={{ textAlign: 'center', color: '#b45309', fontWeight: 700, fontSize: '15px', letterSpacing: '5px', textTransform: 'uppercase', marginBottom: '5px', fontFamily: 'Arial, sans-serif' }}>
+                  OF COMPLETION
+                </div>
+                <div style={{ textAlign: 'center', fontWeight: 800, fontSize: '14px', letterSpacing: '2px', textTransform: 'uppercase', color: '#111', marginBottom: '22px', fontFamily: 'Arial, sans-serif' }}>
+                  STUDENT DEVELOPMENT PROGRAMME
+                </div>
+
+                {/* ═══ PROFESSIONAL BODY TEXT ═══ */}
+                <div style={{ fontSize: '14.5px', color: '#111', lineHeight: '1.7', textAlign: 'justify', marginBottom: '22px' }}>
+                  <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                    <span style={{ whiteSpace: 'nowrap' }}>This is to certify that Mr. / Mrs.</span>
+                    <span style={{ flex: 1, borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', color: '#1e3a8a', fontSize: '15px' }}>
+                      {selectedCertificateModal.studentName}
+                    </span>
+                  </div>
+
+                  <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                    <span style={{ whiteSpace: 'nowrap' }}>of</span>
+                    <span style={{ flex: 1, borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', fontSize: '15px' }}>
+                      {selectedCertificateModal.college}
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap' }}>studying in</span>
+                    <span style={{ width: '120px', borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', fontSize: '15px' }}>
+                      B.E.
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap' }}>of</span>
+                  </div>
+
+                  <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                    <span style={{ flex: 1, borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', fontSize: '15px' }}>
+                      {selectedCertificateModal.department}
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap' }}>has successfully completed the Student Development Programme on</span>
+                  </div>
+
+                  <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                    <span style={{ flex: 1, borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', color: '#166534', fontSize: '15px' }}>
+                      {selectedCertificateModal.courseName}
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap' }}>conducted by Tamil Nadu Skill Development Corporation (TNSDC)</span>
+                  </div>
+
+                  <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                    <span style={{ whiteSpace: 'nowrap' }}>in association with The SM Groups at</span>
+                    <span style={{ flex: 1, borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', fontSize: '15px' }}>
+                      {selectedCertificateModal.venue}
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap' }}>during the Academic Year</span>
+                    <span style={{ width: '140px', borderBottom: '1.5px solid #c5a880', fontWeight: 700, textAlign: 'center', paddingBottom: '2px', fontSize: '15px' }}>
+                      {selectedCertificateModal.academicYear}
+                    </span>
+                    <span>.</span>
+                  </div>
+                </div>
+
+                {/* ═══ FOOTER ROW: DATES, LOGO, SIGNATURE ═══ */}
+                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '28px', width: '100%' }}>
+
+                  {/* Left: Certificate Info & Dates */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', fontSize: '14.5px', color: '#334155', fontFamily: "'Georgia', 'Times New Roman', Times, serif" }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px' }}>
+                      <span style={{ fontWeight: 600 }}>Training Duration:</span>
+                      <span style={{ borderBottom: '1.5px solid #c5a880', fontWeight: 700, color: '#0f172a', padding: '0 6px', fontSize: '14.5px' }}>
+                        {selectedCertificateModal.startDate} to {selectedCertificateModal.endDate}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px' }}>
+                      <span style={{ fontWeight: 600 }}>Issue Date:</span>
+                      <span style={{ borderBottom: '1.5px solid #c5a880', fontWeight: 700, color: '#0f172a', padding: '0 6px', fontSize: '14.5px' }}>
+                        {selectedCertificateModal.issuedDate}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Center: Empty Space */}
+                  <div style={{ textAlign: 'center', width: '85px' }}>
+                  </div>
+
+                  {/* Right: Signature area */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '220px' }}>
+                    {/* Actual MD Signature */}
+                    <div style={{ height: '60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', marginBottom: '4px' }}>
+                      <img src={mdSignature} alt="Managing Director Signature" style={{ height: '55px', width: 'auto', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ width: '100%', borderBottom: '1.5px solid #c5a880' }}></div>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginTop: '4px', textAlign: 'center' }}>
+                      Managing Director, TNSDC
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ineligible CAS note footer */}
+                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '14px 0 6px 0' }} />
+                <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 600, textAlign: 'left' }}>
+                  *This is Eligible under Career Advancement Scheme
+                </div>
+
+              </div>{/* end foreground wrapper */}
+            </div>{/* end #printable-certificate */}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
