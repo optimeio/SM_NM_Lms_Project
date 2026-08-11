@@ -244,6 +244,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// JWT & client credential constants (must be defined before any auth routes)
+const JWT_SECRET = process.env.JWT_SECRET || 'sm_nm_lms_secret_key_2026';
+const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY].filter(Boolean);
+const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET].filter(Boolean);
+
 // 2. Auth: Student Registration (Disabled)
 app.post('/api/auth/register', async (req, res) => {
   return res.status(400).json({ success: false, message: 'Student registration is disabled. Please login using a valid Client Key and Secret Key.' });
@@ -357,9 +362,6 @@ app.post('/api/auth/login', async (req, res) => {
 // ----------------------------------------------------
 // TOKEN RETRIEVAL & REFRESH ENDPOINTS (/api/v1/lms/client/token/)
 // ----------------------------------------------------
-const JWT_SECRET = process.env.JWT_SECRET || 'sm_nm_lms_secret_key_2026';
-const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY].filter(Boolean);
-const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET].filter(Boolean);
 
 app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/token/', '/token/'], upload.none(), (req, res) => {
   const body = req.body || {};
