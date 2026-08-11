@@ -55,5 +55,21 @@
     "_id": "6a72de982ee3b5881a7ad710",
     "__v": 0,
     "createdAt": "2026-08-05T07:00:53.695Z"
+  },
+  "test@student.com_TSMG2026IOT": {
+    "user_unique_id": "test@student.com",
+    "course_unique_code": "TSMG2026IOT",
+    "progress_percentage": "10",
+    "completedVideos": 0,
+    "midQuizPassed": false,
+    "midQuizScore": 0,
+    "finalQuizPassed": false,
+    "finalQuizScore": 0,
+    "certificate_issued": "false",
+    "certificate_issued_at": null,
+    "assessment_status": "false",
+    "course_complete": "false",
+    "total_score": "",
+    "updatedAt": "2026-08-11T13:05:38.044Z"
   }
 }

@@ -47,18 +47,19 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174'
+  'http://127.0.0.1:5174',
+  'https://smtnskill.thesmgroups.com',
+  'http://82.25.120.96',
+  'https://sm-lms.onrender.com'
 ];
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
-      // Allow any subdomain of thesmgroups.com in production
       if (origin.endsWith('.thesmgroups.com') || origin === 'https://thesmgroups.com') {
         return callback(null, true);
       }
-      return callback(null, true); // Keep dynamic but log or filter as needed
+      return callback(null, true);
     }
     return callback(null, true);
   },
