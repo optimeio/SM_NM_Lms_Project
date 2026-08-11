@@ -4,8 +4,13 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'sm_nm_lms_secret_key_2026';
+const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY || '59e8bb42f89d5ee93ff466be97022427'];
+const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET || 'f7a761767124aef8b904c49b52a555d6'];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,67 +108,67 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Auth: Register Student
+// 2. Auth: Student Registration (Disabled)
 app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { fullName, email, phone, gender, password, college, department, year, district } = req.body;
-    
-    if (!email || !password || !fullName) {
-      return res.status(400).json({ message: 'Full name, email, and password are required.' });
-    }
-
-    if (mongoose.connection.readyState === 1) {
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        return res.status(400).json({ message: 'User with this email already exists.' });
-      }
-
-      const newUser = await User.create({
-        fullName,
-        email: email.toLowerCase(),
-        phone,
-        gender,
-        password,
-        college,
-        department,
-        year,
-        district,
-        role: 'student'
-      });
-
-      return res.status(201).json({ success: true, user: newUser });
-    } else {
-      // In-memory fallback
-      const existing = memoryUsers.find(u => u.email === email.toLowerCase());
-      if (existing) {
-        return res.status(400).json({ message: 'User with this email already exists.' });
-      }
-      const newUser = {
-        _id: `user-${Date.now()}`,
-        fullName,
-        email: email.toLowerCase(),
-        phone,
-        gender,
-        password,
-        college,
-        department,
-        year,
-        district,
-        role: 'student'
-      };
-      memoryUsers.push(newUser);
-      return res.status(201).json({ success: true, user: newUser });
-    }
-  } catch (err) {
-    console.error('Registration Error:', err);
-    res.status(500).json({ message: 'Server error during registration.' });
-  }
+  return res.status(400).json({ success: false, message: 'Student registration is disabled. Please login using a valid Client Key and Secret Key.' });
 });
 
-// 3. Auth: Login
+// 3. Auth: Login (Student via Keys & Admin via Email/Password)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, client_key, client_secret, clientKey, clientSecret } = req.body;
+    const key = (client_key || clientKey || '').trim();
+    const secret = (client_secret || clientSecret || '').trim();
+
+    // If Client Key and Secret Key are provided, perform key-based student authentication
+    if (key || secret) {
+      const isValidKey = VALID_CLIENT_KEYS.includes(key);
+      const isValidSecret = VALID_CLIENT_SECRETS.includes(secret);
+
+      if (!isValidKey || !isValidSecret) {
+        return res.status(401).json({ success: false, message: 'Invalid Client Key or Secret Key.' });
+      }
+
+      // Look up default student user or create one
+      const defaultEmail = 'student@nm.student.local';
+      let studentUser;
+
+      if (mongoose.connection.readyState === 1) {
+        studentUser = await User.findOne({ email: defaultEmail });
+        if (!studentUser) {
+          studentUser = await User.create({
+            fullName: 'NM Student',
+            email: defaultEmail,
+            password: 'nm_sso_login',
+            role: 'student',
+            college: 'PSG College of Technology',
+            department: 'CSE',
+            assignedCourses: ['TSMG2026IOT']
+          });
+        }
+      } else {
+        studentUser = memoryUsers.find(u => u.email === defaultEmail);
+        if (!studentUser) {
+          studentUser = {
+            _id: 'student-sso-default',
+            user_unique_id: 'student-sso-default',
+            fullName: 'NM Student',
+            email: defaultEmail,
+            password: 'nm_sso_login',
+            role: 'student',
+            college: 'PSG College of Technology',
+            department: 'CSE',
+            assignedCourses: ['TSMG2026IOT']
+          };
+          memoryUsers.push(studentUser);
+        }
+      }
+
+      const access = jwt.sign({ client_key: key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
+      return res.json({ success: true, user: studentUser, token: access });
+    }
+
+    // Require email/password for Admin login
     if (!username || !password) {
       return res.status(400).json({ message: 'Register Number/Email and Password are required.' });
     }
@@ -188,45 +193,51 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    if (mongoose.connection.readyState === 1) {
-      const user = await User.findOne({
-        $or: [{ email: inputUser }, { phone: inputUser }]
-      });
-
-      if (!user) {
-        return res.status(404).json({ message: 'No registered user found with these credentials.' });
-      }
-
-      if (user.password !== inputPass) {
-        return res.status(401).json({ message: 'Incorrect password.' });
-      }
-
-      return res.json({ success: true, user });
-    } else {
-      const user = memoryUsers.find(u => u.email === inputUser || u.phone === inputUser);
-      if (!user) {
-        // Create guest object for smooth access
-        const formattedName = inputUser.includes('@') 
-          ? inputUser.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-          : inputUser.replace(/\b\w/g, c => c.toUpperCase());
-        const guestUser = {
-          _id: `guest-${Date.now()}`,
-          fullName: formattedName,
-          email: inputUser.includes('@') ? inputUser : `${inputUser}@example.com`,
-          role: 'student'
-        };
-        return res.json({ success: true, user: guestUser });
-      }
-
-      if (user.password !== inputPass) {
-        return res.status(401).json({ message: 'Incorrect password.' });
-      }
-
-      return res.json({ success: true, user });
-    }
+    return res.status(401).json({ message: 'Invalid credentials or registration is disabled.' });
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ message: 'Server error during login.' });
+  }
+});
+
+// Token retrieval & refresh endpoints
+app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/token/', '/token/'], (req, res) => {
+  const body = req.body || {};
+  const client_key = (body.client_key || body.clientKey || '').trim();
+  const client_secret = (body.client_secret || body.clientSecret || '').trim();
+  
+  if (!client_key || !client_secret) {
+    return res.status(400).json({ status: false, message: 'client_key and client_secret are required.' });
+  }
+
+  const isValidKey = VALID_CLIENT_KEYS.includes(client_key);
+  const isValidSecret = VALID_CLIENT_SECRETS.includes(client_secret);
+
+  if (!isValidKey || !isValidSecret) {
+    return res.status(401).json({ status: false, message: 'Invalid client credentials.' });
+  }
+
+  const access = jwt.sign({ client_key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
+  const refresh = jwt.sign({ client_key, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+
+  return res.json({ status: true, access, refresh, expires_in: 3600 });
+});
+
+app.post(['/lms/client/token/refresh/', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh/', '/token/refresh/'], (req, res) => {
+  const { refresh } = req.body || {};
+  if (!refresh) {
+    return res.status(400).json({ status: false, message: 'refresh token is required.' });
+  }
+
+  try {
+    const decoded = jwt.verify(refresh, JWT_SECRET);
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ status: false, message: 'Invalid token type.' });
+    }
+    const access = jwt.sign({ client_key: decoded.client_key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
+    return res.json({ status: true, access, expires_in: 3600 });
+  } catch (err) {
+    return res.status(401).json({ status: false, message: 'Invalid or expired refresh token.' });
   }
 });
 

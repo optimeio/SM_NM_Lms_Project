@@ -25,5 +25,21 @@
       "TSMG2026IOT"
     ],
     "course_unique_code": "NTEDU0001"
+  },
+  {
+    "_id": "FxEI1WEjJBYgXNbQ3rsddfEcJTV0v0WQQRIj",
+    "user_unique_id": "FxEI1WEjJBYgXNbQ3rsddfEcJTV0v0WQQRIj",
+    "fullName": "Sam",
+    "email": "FxEI1WEjJBYgXNbQ3rsddfEcJTV0v0WQQRIj@nm.student.local",
+    "password": "nm_sso_login",
+    "college": "abc college",
+    "department": "computer science",
+    "district": "chennai",
+    "university": "anna university",
+    "role": "student",
+    "assignedCourses": [
+      "Python3"
+    ],
+    "course_unique_code": "Python3"
   }
 ]

@@ -6,9 +6,12 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 import User from './models/User.js';
 import Course from './models/Course.js';
 import Progress from './models/Progress.js';
+
+const upload = multer();
 
 // Resolve __dirname first so dotenv loads backend/.env correctly
 // regardless of which directory the process is started from
@@ -126,9 +129,9 @@ connectDatabase();
 // Default Admin User
 const DEFAULT_ADMIN = {
   _id: 'admin-1',
-  fullName: 'SM Groups Administrator',
-  email: 'thesmgroups@gmail.com',
-  password: 'TSMGPVT@2026',
+  fullName: process.env.ADMIN_FULLNAME || 'Administrator',
+  email: process.env.ADMIN_EMAIL || 'admin@example.com',
+  password: process.env.ADMIN_PASSWORD || 'admin_secret_pass',
   role: 'admin',
   college: 'The SM Groups',
   department: 'Administration'
@@ -241,73 +244,68 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Auth: Student Registration
+// 2. Auth: Student Registration (Disabled)
 app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { fullName, email, phone, gender, password, college, department, year, district } = req.body;
-    
-    if (!email || !password || !fullName) {
-      return res.status(400).json({ message: 'Full name, email, and password are required.' });
-    }
-
-    if (mongoose.connection.readyState === 1) {
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        return res.status(400).json({ message: 'User with this email already exists.' });
-      }
-
-      const newUser = await User.create({
-        fullName,
-        email: email.toLowerCase(),
-        phone,
-        gender,
-        password,
-        college,
-        department,
-        year,
-        district,
-        role: 'student'
-      });
-
-      // Keep local memory & persistent backup in sync
-      const userObj = newUser.toObject ? newUser.toObject() : newUser;
-      memoryUsers.push(userObj);
-      saveUsersToFile();
-
-      return res.status(201).json({ success: true, user: newUser });
-    } else {
-      const existing = memoryUsers.find(u => u.email === email.toLowerCase());
-      if (existing) {
-        return res.status(400).json({ message: 'User with this email already exists.' });
-      }
-
-      const newUser = {
-        _id: `user-${Date.now()}`,
-        fullName,
-        email: email.toLowerCase(),
-        phone,
-        gender,
-        password,
-        college,
-        department,
-        year,
-        district,
-        role: 'student'
-      };
-      memoryUsers.push(newUser);
-      saveUsersToFile();
-      return res.status(201).json({ success: true, user: newUser });
-    }
-  } catch (err) {
-    console.error('Registration API Error:', err);
-    res.status(500).json({ message: 'Server error during registration.' });
-  }
+  return res.status(400).json({ success: false, message: 'Student registration is disabled. Please login using a valid Client Key and Secret Key.' });
 });
 
-// 3. Auth: Login (Student & Admin)
+// 3. Auth: Login (Student via Keys & Admin via Email/Password)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, client_key, client_secret, clientKey, clientSecret } = req.body;
+    const key = (client_key || clientKey || '').trim();
+    const secret = (client_secret || clientSecret || '').trim();
+
+    // If Client Key and Secret Key are provided, perform key-based student authentication
+    if (key || secret) {
+      const isValidKey = VALID_CLIENT_KEYS.includes(key);
+      const isValidSecret = VALID_CLIENT_SECRETS.includes(secret);
+
+      if (!isValidKey || !isValidSecret) {
+        return res.status(401).json({ success: false, message: 'Invalid Client Key or Secret Key.' });
+      }
+
+      // Look up default student user or create one
+      const defaultEmail = 'student@nm.student.local';
+      let studentUser;
+
+      if (mongoose.connection.readyState === 1) {
+        studentUser = await User.findOne({ email: defaultEmail });
+        if (!studentUser) {
+          studentUser = await User.create({
+            fullName: 'NM Student',
+            email: defaultEmail,
+            password: 'nm_sso_login',
+            role: 'student',
+            college: 'PSG College of Technology',
+            department: 'CSE',
+            assignedCourses: ['TSMG2026IOT']
+          });
+        }
+      } else {
+        studentUser = memoryUsers.find(u => u.email === defaultEmail);
+        if (!studentUser) {
+          studentUser = {
+            _id: 'student-sso-default',
+            user_unique_id: 'student-sso-default',
+            fullName: 'NM Student',
+            email: defaultEmail,
+            password: 'nm_sso_login',
+            role: 'student',
+            college: 'PSG College of Technology',
+            department: 'CSE',
+            assignedCourses: ['TSMG2026IOT']
+          };
+          memoryUsers.push(studentUser);
+          saveUsersToFile();
+        }
+      }
+
+      const access = jwt.sign({ client_key: key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
+      return res.json({ success: true, user: studentUser, token: access });
+    }
+
+    // Otherwise, require email/password for Admin login
     if (!username || !password) {
       return res.status(400).json({ message: 'Email/Register Number and Password are required.' });
     }
@@ -316,15 +314,16 @@ app.post('/api/auth/login', async (req, res) => {
     const inputPass = password.trim();
 
     // Admin Credentials Authentication
-    if (inputUser === 'thesmgroups@gmail.com' || inputUser === 'admin@smgroups.com') {
-      if (inputPass === 'TSMGPVT@2026') {
+    const adminEmail = (DEFAULT_ADMIN.email || '').toLowerCase();
+    if (inputUser === adminEmail || inputUser === 'admin@smgroups.com') {
+      if (inputPass === DEFAULT_ADMIN.password) {
         const adminObj = {
           _id: 'admin-1',
-          fullName: 'SM Groups Administrator',
-          email: 'thesmgroups@gmail.com',
+          fullName: DEFAULT_ADMIN.fullName,
+          email: adminEmail,
           role: 'admin',
-          college: 'The SM Groups',
-          department: 'Administration'
+          college: DEFAULT_ADMIN.college,
+          department: DEFAULT_ADMIN.department
         };
         return res.json({ success: true, user: adminObj });
       } else {
@@ -332,32 +331,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    if (mongoose.connection.readyState === 1) {
-      const user = await User.findOne({
-        $or: [{ email: inputUser }, { phone: inputUser }]
-      });
-
-      if (!user) {
-        return res.status(404).json({ message: 'No registered user found with these credentials.' });
-      }
-
-      if (user.password !== inputPass) {
-        return res.status(401).json({ message: 'Incorrect password.' });
-      }
-
-      return res.json({ success: true, user });
-    } else {
-      const user = memoryUsers.find(u => u.email === inputUser || u.phone === inputUser);
-      if (!user) {
-        return res.status(404).json({ message: 'No registered user found with these credentials.' });
-      }
-
-      if (user.password !== inputPass) {
-        return res.status(401).json({ message: 'Incorrect password.' });
-      }
-
-      return res.json({ success: true, user });
-    }
+    return res.status(401).json({ message: 'Invalid credentials or registration is disabled.' });
   } catch (err) {
     console.error('Login API Error:', err);
     res.status(500).json({ message: 'Server error during login.' });
@@ -368,10 +342,10 @@ app.post('/api/auth/login', async (req, res) => {
 // TOKEN RETRIEVAL & REFRESH ENDPOINTS (/api/v1/lms/client/token/)
 // ----------------------------------------------------
 const JWT_SECRET = process.env.JWT_SECRET || 'sm_nm_lms_secret_key_2026';
-const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY, '59e8bb42f89d5ee93ff466be97022427', 'lms_client_key_2026'].filter(Boolean);
-const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET, 'f7a761767124aef8b904c49b52a555d6', 'lms_client_secret_2026'].filter(Boolean);
+const VALID_CLIENT_KEYS = [process.env.CLIENT_KEY].filter(Boolean);
+const VALID_CLIENT_SECRETS = [process.env.CLIENT_SECRET].filter(Boolean);
 
-app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/token/'], (req, res) => {
+app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/token/', '/token/'], upload.none(), (req, res) => {
   const body = req.body || {};
   const client_key = (body.client_key || body.clientKey || '').trim();
   const client_secret = (body.client_secret || body.clientSecret || '').trim();
@@ -393,7 +367,7 @@ app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/to
   return res.json({ status: true, access, refresh, expires_in: 3600 });
 });
 
-app.post(['/lms/client/token/refresh/', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh/'], (req, res) => {
+app.post(['/lms/client/token/refresh/', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh/', '/token/refresh/'], (req, res) => {
   const { refresh } = req.body || {};
   if (!refresh) {
     return res.status(400).json({ status: false, message: 'refresh token is required.' });
@@ -633,7 +607,7 @@ const authenticateTokenHeader = (req, res, next) => {
 };
 
 
-const TNSKILL_BASE = 'https://sandbox-api.skilldevelopment.tn.gov.in';
+const TNSKILL_BASE = process.env.TNSKILL_BASE || 'https://sandbox-api.skilldevelopment.tn.gov.in';
 
 
 // Helper to save base64 videos/ppts to physical files on disk
@@ -1374,8 +1348,7 @@ app.get(['/api/courses/:courseCode/ppt/:filename', '/courses/:courseCode/ppts/:f
 // NAAN MUDHALVAN (TN SKILL) KNOWLEDGE PARTNER APIs
 // ----------------------------------------------------
 
-// 8. NM Course Subscribe API
-app.post('/nm/api/course/subscribe/', authenticateTokenHeader, async (req, res) => {
+app.post(['/nm/api/course/subscribe/', '/course/subscribe/', '/tnskill/api/course/subscribe/'], authenticateTokenHeader, async (req, res) => {
   try {
     const { user_id, course_id } = req.body || {};
     
@@ -1441,8 +1414,7 @@ app.post('/nm/api/course/subscribe/', authenticateTokenHeader, async (req, res) 
   }
 });
 
-// 9. NM Course Access URL API
-app.post('/nm/api/course/access/', authenticateTokenHeader, async (req, res) => {
+app.post(['/nm/api/course/access/', '/course/access/', '/tnskill/api/course/access/'], authenticateTokenHeader, async (req, res) => {
   try {
     const { user_id, course_id } = req.body || {};
     
@@ -1464,7 +1436,7 @@ app.post('/nm/api/course/access/', authenticateTokenHeader, async (req, res) => 
 });
 
 // 10. NM Student Progress API (Retrieval)
-app.post('/nm/api/student/progress', authenticateTokenHeader, async (req, res) => {
+app.post(['/nm/api/student/progress', '/tnskill/api/student/progress'], authenticateTokenHeader, async (req, res) => {
   try {
     const { user_id, course_id } = req.body || {};
     

@@ -291,11 +291,57 @@ Date: ${new Date().toLocaleDateString()}
   const menuItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'My Courses', icon: <BookOpen size={20} /> },
+    { name: 'Course Catalog', icon: <Compass size={20} /> },
     { name: 'Certificates', icon: <Award size={20} /> },
     { name: 'Messages', icon: <MessageSquare size={20} /> },
     { name: 'Profile', icon: <User size={20} /> },
   ];
   const [allCoursesData, setAllCoursesData] = useState([]);
+  const [allPublishedCourses, setAllPublishedCourses] = useState([]);
+
+  const handleSubscribe = async (course) => {
+    try {
+      const userId = user.email || user.user_unique_id || 'student_123';
+      const res = await fetch('/tnskill/api/course/subscribe/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          course_id: course.course_unique_code || course.id
+        })
+      });
+      const data = await res.json();
+      if (data.subscription_registration_status) {
+        triggerToast(`🎉 Successfully subscribed to ${course.title || course.name}!`);
+        
+        // Update user state to reload courses
+        const updatedUser = {
+          ...user,
+          assignedCourses: [...(user.assignedCourses || []), course.course_unique_code || course.id]
+        };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        // Sync with registeredUsers in localStorage
+        const storedUsersRaw = localStorage.getItem('registeredUsers');
+        if (storedUsersRaw) {
+          const registeredUsers = JSON.parse(storedUsersRaw);
+          const updatedUsers = registeredUsers.map(u => 
+            (u.email && u.email.toLowerCase() === userId.toLowerCase()) || (u._id && String(u._id) === String(userId))
+              ? { ...u, assignedCourses: [...(u.assignedCourses || []), course.course_unique_code || course.id] }
+              : u
+          );
+          localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
+        }
+      } else {
+        triggerToast('❌ Subscription failed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Subscription error:', err);
+      triggerToast('❌ Error connecting to subscription server.');
+    }
+  };
+
   const [activeCourse, setActiveCourse] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [activeQuizModal, setActiveQuizModal] = useState(null); // 'mid' | 'final' | null
@@ -304,6 +350,7 @@ Date: ${new Date().toLocaleDateString()}
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizResult, setQuizResult] = useState(null);
   const [isRetakingQuiz, setIsRetakingQuiz] = useState(false);
+  const [currentVideoDuration, setCurrentVideoDuration] = useState('12:45');
 
   // Helper: Verify if a course is active and published
   const isCoursePublished = (course) => {
@@ -313,7 +360,7 @@ Date: ${new Date().toLocaleDateString()}
     return true;
   };
 
-  // Helper: Verify if a course is assigned to the current student (or student's department/college/all)
+  // Helper: Verify if a course is assigned to the current student
   const isCourseAssignedToUser = (course, currentUser) => {
     if (!course || !currentUser) return false;
     
@@ -325,43 +372,19 @@ Date: ${new Date().toLocaleDateString()}
 
     // 1. If user has explicit assignedCourses list
     if (userAssigned.length > 0) {
-      return userAssigned.some(ac => {
+      const isExplicitlyAssigned = userAssigned.some(ac => {
         const codeStr = String(ac).trim().toLowerCase();
         return codeStr === courseCode || codeStr === courseTitle || (courseCode && codeStr.includes(courseCode)) || (courseTitle && codeStr.includes(courseTitle));
       });
+      if (isExplicitlyAssigned) return true;
     }
 
     // 2. If user has a main course_unique_code assigned
     if (userMainCode) {
-      return userMainCode === courseCode || userMainCode === courseTitle;
+      if (userMainCode === courseCode || userMainCode === courseTitle) return true;
     }
 
-    // 3. If user explicitly has assignedCourses = [] (no courses assigned)
-    if (Array.isArray(currentUser.assignedCourses) && currentUser.assignedCourses.length === 0) {
-      return false;
-    }
-
-    // 4. Fallback: check target scope (all / college / department / individual)
-    const targetScope = String(course.autoAssignTo || course.assignedTo || course.targetMode || 'all').toLowerCase();
-    const targetCollege = String(course.autoAssignCollege || course.targetCollege || 'ALL').trim().toUpperCase();
-    const targetDept = String(course.autoAssignDept || course.targetDept || 'ALL').trim().toUpperCase();
-    const userCollege = String(currentUser.college || '').trim().toUpperCase();
-    const userDept = String(currentUser.department || '').trim().toUpperCase();
-
-    if (targetScope === 'all') {
-      return true;
-    } else if (targetScope === 'college') {
-      return targetCollege === 'ALL' || targetCollege === userCollege;
-    } else if (targetScope === 'department') {
-      const matchesCollege = targetCollege === 'ALL' || targetCollege === userCollege;
-      const matchesDept = targetDept === 'ALL' || targetDept === userDept;
-      return matchesCollege && matchesDept;
-    } else if (targetScope === 'individual') {
-      const targetEmails = (course.autoAssignStudents || course.selectedStudentEmails || []).map(e => String(e).toLowerCase());
-      return targetEmails.includes(String(currentUser.email || '').toLowerCase());
-    }
-
-    return true;
+    return false; // Enforce explicit subscription/assignment
   };
 
   useEffect(() => {
@@ -508,6 +531,8 @@ Date: ${new Date().toLocaleDateString()}
         // Filter courses: ONLY show courses that are PUBLISHED AND ASSIGNED to this student/department/college/all
         const visibleCourses = hydratedCourses.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
         setAllCoursesData(visibleCourses);
+        const publishedCourses = hydratedCourses.filter(c => isCoursePublished(c));
+        setAllPublishedCourses(publishedCourses);
       } catch {
         if (localMapped.length > 0) {
           let latestUser = user;
@@ -524,6 +549,8 @@ Date: ${new Date().toLocaleDateString()}
           }
           const visibleCourses = localMapped.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
           setAllCoursesData(visibleCourses);
+          const publishedCourses = localMapped.filter(c => isCoursePublished(c));
+          setAllPublishedCourses(publishedCourses);
         }
       }
     };
@@ -982,302 +1009,228 @@ Date: ${new Date().toLocaleDateString()}
                 ))}
               </div>
 
-              {/* ACTIVE COURSE LEARNING WORKSPACE MODAL */}
+              {/* ACTIVE COURSE LEARNING WORKSPACE — Full Page Player */}
               {activeCourse && (
-                <div className="admin-modal-overlay" onClick={() => setActiveCourse(null)} style={{ zIndex: 1000, background: 'rgba(17, 24, 39, 0.7)', backdropFilter: 'blur(4px)' }}>
-                  <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '940px', width: '92%', background: 'var(--bg-card)', color: 'var(--text-dark)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-soft)', paddingBottom: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', background: 'var(--accent-light)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎓</div>
-                        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-dark)', margin: 0, letterSpacing: '-0.3px' }}>
-                          {activeCourse.title}
-                        </h3>
+                <div className="cp-fullpage-overlay">
+                  {/* Top Bar */}
+                  <div className="cp-topbar">
+                    <div className="cp-topbar-left">
+                      <div className="cp-course-icon">🎓</div>
+                      <div>
+                        <h3 className="cp-course-title">{activeCourse.title}</h3>
+                        <span className="cp-course-meta">12 Modules • Intermediate Level</span>
                       </div>
-                      <button 
-                        onClick={() => setActiveCourse(null)}
-                        style={{ background: 'var(--bg-body)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: '18px', cursor: 'pointer', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                      >
-                        ✕
-                      </button>
+                      <span className="cp-status-badge">In Progress</span>
                     </div>
-
-                    {/* Overall Course Progress Header */}
-                    <div style={{ marginBottom: '20px', background: 'var(--bg-body)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-soft)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                        <span>⚡ Course Completion Progress</span>
-                        <span style={{ color: 'var(--accent)' }}>{activeCourse.progress}% Mastered</span>
-                      </div>
-                      <div style={{ height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ width: `${activeCourse.progress}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #8b5cf6)', borderRadius: '4px', transition: 'width 0.4s ease' }}></div>
-                      </div>
+                    <div className="cp-topbar-right">
+                      <button className="cp-close-btn" onClick={() => setActiveCourse(null)}>✕ Exit</button>
                     </div>
+                  </div>
 
-                    <div className="db-workspace-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px' }}>
-                      {/* Video Player & PPT Area */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '16px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: 'var(--shadow-sm)' }}>
-                          <video
-                            id="studentCourseVideoPlayer"
-                            controls
-                            autoPlay
-                            key={`${activeCourse.id}_vid_${currentVideoIndex}`}
-                            poster="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80"
-                            style={{ width: '100%', height: '260px', borderRadius: 'var(--radius-md)', background: '#000', objectFit: 'contain' }}
-                            onTimeUpdate={(e) => {
-                              if (e.target.duration > 0) {
-                                const pct = Math.floor((e.target.currentTime / e.target.duration) * 100);
-                                setVideoWatchProgress(pct);
+                  {/* Progress Bar */}
+                  <div className="cp-progress-strip">
+                    <div className="cp-progress-strip-inner">
+                      <span className="cp-progress-label">🏆 Course Completion Progress</span>
+                      <span className="cp-progress-pct">{activeCourse.progress}% Completed</span>
+                    </div>
+                    <div className="cp-progress-bar-bg">
+                      <div className="cp-progress-bar-fill" style={{ width: `${activeCourse.progress}%` }}></div>
+                    </div>
+                  </div>
 
-                                // Auto mark completed in checklist & course progress when 75% reached!
-                                if (pct >= 75 && currentVideoIndex >= activeCourse.completedVideos) {
-                                  const newComp = currentVideoIndex + 1;
-                                  const newProgress = Math.min(100, Math.round((newComp / 12) * 100));
-                                  const updatedCourse = {
-                                    ...activeCourse,
-                                    completedVideos: newComp,
-                                    progress: newProgress
-                                  };
-                                  setActiveCourse(updatedCourse);
-                                  setAllCoursesData(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
-                                  sendProgressUpdate(updatedCourse.course_unique_code, newProgress, newProgress === 100);
-                                }
-                              }
-                            }}
-                            onEnded={() => {
-                              setVideoWatchProgress(100);
-                            }}
-                            onError={(e) => {
-                              // Don't load fake videos — just pause and show nothing
-                              e.target.removeAttribute('src');
-                              e.target.load();
-                            }}
-                            src={
-                              (() => {
-                                const currentVid = activeCourse.videos?.[currentVideoIndex];
-                                if (currentVid && typeof currentVid === 'string') {
-                                  if (
-                                    currentVid.startsWith('http') ||
-                                    currentVid.startsWith('data:video') ||
-                                    currentVid.startsWith('/courses/') ||
-                                    currentVid.startsWith('/api/')
-                                  ) {
-                                    return currentVid;
-                                  }
-                                }
-                                // No valid video URL — return empty so the browser shows nothing
-                                return '';
-                              })()
-                            }
-                          >
-                            Your browser does not support HTML5 video.
-                          </video>
-
-                          <div className="db-flex-responsive" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--text-dark)', fontWeight: 800 }}>
-                                  Module #{currentVideoIndex + 1} Video Stream
-                                </h4>
-                                <span 
-                                  title={videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? "75%+ Watched (Lesson Unlocked)" : `Watch Progress: ${videoWatchProgress}% (75% Required)`}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#dcfce7' : '#fef3c7',
-                                    color: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#15803d' : '#b45309',
-                                    padding: '4px 10px',
-                                    borderRadius: '20px',
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    border: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '1px solid #bbf7d0' : '1px solid #fde68a'
-                                  }}
-                                >
-                                  <span style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    background: videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos ? '#22c55e' : '#f59e0b'
-                                  }}></span>
-                                  {currentVideoIndex < activeCourse.completedVideos || videoWatchProgress >= 75 ? 'Ready' : `${videoWatchProgress}%`}
-                                </span>
-                              </div>
-                              <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)' }}>
-                                {(activeCourse.videos && activeCourse.videos[currentVideoIndex] && !activeCourse.videos[currentVideoIndex].startsWith('data:')) ? activeCourse.videos[currentVideoIndex] : `Lesson Video ${currentVideoIndex + 1}`}
-                              </p>
-                            </div>
-                            <button 
-                              style={{ background: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'linear-gradient(135deg, var(--accent), #8b5cf6)' : 'var(--bg-body)', color: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '#fff' : 'var(--text-muted)', border: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'none' : '1px solid var(--border)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', boxShadow: (videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? '0 4px 12px rgba(90,63,192,0.25)' : 'none', transition: 'all 0.2s' }}
-                              onClick={() => {
-                                // Enforce 75% video watching rule for uncompleted videos
-                                if (currentVideoIndex >= activeCourse.completedVideos && videoWatchProgress < 75) {
-                                  triggerToast(`⚠️ Please watch at least 75% of Video #${currentVideoIndex + 1} to complete! (Current: ${videoWatchProgress}%)`, 'error');
-                                  return;
-                                }
-
-                                const nextVid = currentVideoIndex + 1;
-                                if (nextVid === 6 && !activeCourse.midQuizPassed) {
-                                  setActiveQuizModal('mid');
-                                  triggerToast('📝 You have reached Video 6! Please pass the Mid-Course Quiz to unlock Video 7.');
-                                  return;
-                                }
-                                if (nextVid === 12 && !activeCourse.finalQuizPassed) {
-                                  setActiveQuizModal('final');
-                                  triggerToast('🏆 You have finished all 12 Videos! Complete the Final Quiz for Certification.');
-                                  return;
-                                }
-
-                                // If the user jumped to a higher video (e.g. video 5) and marks it completed,
-                                // we complete all intermediate videos as well (videos 1, 2, 3, 4, 5).
-                                const newComp = Math.max(activeCourse.completedVideos, nextVid);
+                  {/* Main 2-Column Layout */}
+                  <div className="cp-main-grid">
+                    {/* LEFT — Video Player */}
+                    <div className="cp-left-col">
+                      {/* Video Player */}
+                      <div className="cp-video-wrapper">
+                        <video
+                          id="studentCourseVideoPlayer"
+                          controls
+                          autoPlay
+                          key={`${activeCourse.id}_vid_${currentVideoIndex}`}
+                          poster="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80"
+                          className="cp-video-player"
+                          onTimeUpdate={(e) => {
+                            if (e.target.duration > 0) {
+                              const pct = Math.floor((e.target.currentTime / e.target.duration) * 100);
+                              setVideoWatchProgress(pct);
+                              if (pct >= 75 && currentVideoIndex >= activeCourse.completedVideos) {
+                                const newComp = currentVideoIndex + 1;
                                 const newProgress = Math.min(100, Math.round((newComp / 12) * 100));
-                                const updatedCourse = {
-                                  ...activeCourse,
-                                  completedVideos: newComp,
-                                  progress: newProgress
-                                };
+                                const updatedCourse = { ...activeCourse, completedVideos: newComp, progress: newProgress };
                                 setActiveCourse(updatedCourse);
                                 setAllCoursesData(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
                                 sendProgressUpdate(updatedCourse.course_unique_code, newProgress, newProgress === 100);
-
-                                setVideoWatchProgress(0);
-                                if (nextVid < 12) {
-                                  setCurrentVideoIndex(nextVid);
-                                  triggerToast(`▶ Completed Video ${currentVideoIndex + 1}. Playing Video ${nextVid + 1}`);
-                                } else {
-                                  triggerToast('🎉 All videos completed!');
-                                }
-                              }}
-                            >
-                              Mark Video {currentVideoIndex + 1} Completed & Next →
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* PPT Download for Current Module */}
-                        <div className="db-flex-responsive" style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                          <div>
-                            <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ background: 'var(--accent-light)', padding: '6px', borderRadius: '8px' }}>📊</span> 
-                              Module #{currentVideoIndex + 1} Presentation Deck
-                            </span>
-                            <p style={{ margin: '4px 0 0 36px', fontSize: '12.5px', color: 'var(--text-muted)' }}>
-                              {(activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `Module_${currentVideoIndex + 1}_Slides.pptx`}
-                            </p>
-                          </div>
-                          <div>
-                            <button 
-                              style={{ background: 'var(--white)', color: 'var(--text-dark)', border: '1.5px solid var(--border)', padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', boxShadow: 'var(--shadow-xs)' }}
-                              onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                              onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dark)'; }}
-                              onClick={() => {
-                                const pptData = activeCourse.ppts && activeCourse.ppts[currentVideoIndex];
-                                const pptName = (activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `${activeCourse.title}_Module_${currentVideoIndex + 1}.pptx`;
-                                handleDownloadPPT(activeCourse.title, currentVideoIndex, pptData, pptName, activeCourse.course_unique_code);
-                                triggerToast(`📥 Successfully downloaded PPT Presentation #${currentVideoIndex + 1}!`);
-                              }}
-                            >
-                              📥 Download PPT
-                            </button>
-                          </div>
-                        </div>
+                              }
+                            }
+                          }}
+                          onLoadedMetadata={(e) => {
+                            if (e.target.duration > 0 && e.target.duration !== Infinity) {
+                              const mins = Math.floor(e.target.duration / 60);
+                              const secs = Math.floor(e.target.duration % 60);
+                              setCurrentVideoDuration(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+                            }
+                          }}
+                          onEnded={() => setVideoWatchProgress(100)}
+                          onError={(e) => { e.target.removeAttribute('src'); e.target.load(); }}
+                          src={(() => {
+                            const v = activeCourse.videos?.[currentVideoIndex];
+                            if (v && typeof v === 'string' && (v.startsWith('http') || v.startsWith('data:video') || v.startsWith('/courses/') || v.startsWith('/api/'))) return v;
+                            return '';
+                          })()}
+                        >
+                          Your browser does not support HTML5 video.
+                        </video>
                       </div>
 
-                      {/* Video & Quiz Navigation Sidebar */}
-                      <div style={{ height: '410px', overflowY: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px', boxShadow: 'var(--shadow-sm)' }}>
-                        <h4 style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-dark)', fontWeight: 800 }}>12 Module Checklist</h4>
+                      {/* Video Info */}
+                      <div className="cp-video-info">
+                        <h4 className="cp-video-title">Lesson Video {currentVideoIndex + 1}</h4>
+                        <p className="cp-video-desc">
+                          {(activeCourse.videos && activeCourse.videos[currentVideoIndex] && !activeCourse.videos[currentVideoIndex].startsWith('data:') && !activeCourse.videos[currentVideoIndex].startsWith('/') && !activeCourse.videos[currentVideoIndex].startsWith('http')) ? activeCourse.videos[currentVideoIndex] : 'Introduction to the course and overview of what you will learn.'}
+                        </p>
+
+                        {/* Meta chips */}
+                        <div className="cp-meta-row">
+                          <div className="cp-meta-chip">
+                            <span className="cp-meta-icon">🕐</span>
+                            <div><strong>{currentVideoDuration}</strong><span>Duration</span></div>
+                          </div>
+                          <div className="cp-meta-chip">
+                            <span className="cp-meta-icon">▶</span>
+                            <div><strong>{currentVideoIndex + 1} / {(activeCourse.videos || []).length || 12}</strong><span>Videos</span></div>
+                          </div>
+                          <button
+                            className="cp-meta-chip cp-meta-chip-btn"
+                            onClick={() => {
+                              const pptData = activeCourse.ppts && activeCourse.ppts[currentVideoIndex];
+                              const pptName = (activeCourse.pptsNames && activeCourse.pptsNames[currentVideoIndex]) || `${activeCourse.title}_Module_${currentVideoIndex + 1}.pptx`;
+                              handleDownloadPPT(activeCourse.title, currentVideoIndex, pptData, pptName, activeCourse.course_unique_code);
+                              triggerToast(`📥 Downloaded PPT #${currentVideoIndex + 1}!`);
+                            }}
+                          >
+                            <span className="cp-meta-icon">📄</span>
+                            <div><strong>PDF Notes</strong><span>Download</span></div>
+                          </button>
+
+                          <button
+                            className={`cp-mark-btn ${(videoWatchProgress >= 75 || currentVideoIndex < activeCourse.completedVideos) ? 'cp-mark-btn--active' : 'cp-mark-btn--inactive'}`}
+                            onClick={() => {
+                              if (currentVideoIndex >= activeCourse.completedVideos && videoWatchProgress < 75) {
+                                triggerToast(`⚠️ Watch at least 75% of Video #${currentVideoIndex + 1} first! (${videoWatchProgress}% watched)`);
+                                return;
+                              }
+                              const nextVid = currentVideoIndex + 1;
+                              if (nextVid === 6 && !activeCourse.midQuizPassed) {
+                                setActiveQuizModal('mid');
+                                triggerToast('📝 Reached Video 6! Pass the Mid-Course Quiz to unlock Video 7.');
+                                return;
+                              }
+                              if (nextVid === 12 && !activeCourse.finalQuizPassed) {
+                                setActiveQuizModal('final');
+                                triggerToast('🏆 All 12 Videos done! Complete the Final Quiz for Certification.');
+                                return;
+                              }
+                              const newComp = Math.max(activeCourse.completedVideos, nextVid);
+                              const newProgress = Math.min(100, Math.round((newComp / 12) * 100));
+                              const updatedCourse = { ...activeCourse, completedVideos: newComp, progress: newProgress };
+                              setActiveCourse(updatedCourse);
+                              setAllCoursesData(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+                              sendProgressUpdate(updatedCourse.course_unique_code, newProgress, newProgress === 100);
+                              setVideoWatchProgress(0);
+                              if (nextVid < 12) { setCurrentVideoIndex(nextVid); triggerToast(`▶ Completed Video ${currentVideoIndex + 1}. Playing Video ${nextVid + 1}`); }
+                              else triggerToast('🎉 All videos completed!');
+                            }}
+                          >
+                            ✓ Mark as Completed
+                          </button>
+                        </div>
+
+                        {/* Prev / Next Navigation */}
+                        <div className="cp-nav-row">
+                          <button
+                            className="cp-nav-prev"
+                            disabled={currentVideoIndex === 0}
+                            onClick={() => {
+                              if (currentVideoIndex > 0) {
+                                setCurrentVideoIndex(currentVideoIndex - 1);
+                                setVideoWatchProgress(currentVideoIndex - 1 < activeCourse.completedVideos ? 100 : 0);
+                                triggerToast(`◀ Playing Video #${currentVideoIndex}`);
+                              }
+                            }}
+                          >
+                            ← Previous
+                          </button>
+                          <button
+                            className="cp-nav-next"
+                            disabled={currentVideoIndex >= 11}
+                            onClick={() => {
+                              const nextVid = currentVideoIndex + 1;
+                              const isLocked = nextVid > activeCourse.completedVideos || (nextVid > 6 && !activeCourse.midQuizPassed);
+                              if (isLocked) { triggerToast(`🔒 Complete Video ${currentVideoIndex + 1} first to unlock Video ${nextVid + 1}`); return; }
+                              setCurrentVideoIndex(nextVid);
+                              setVideoWatchProgress(nextVid < activeCourse.completedVideos ? 100 : 0);
+                              triggerToast(`▶ Playing Video #${nextVid + 1}`);
+                            }}
+                          >
+                            Next Video →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RIGHT — Course Content Sidebar */}
+                    <div className="cp-right-col">
+                      <div className="cp-sidebar-header">
+                        <h4 className="cp-sidebar-title">Course Content</h4>
+                        <span className="cp-sidebar-meta">12 Modules • {(activeCourse.videos || []).length || 12} Lessons</span>
+                      </div>
+                      <div className="cp-video-list">
                         {Array.from({ length: 12 }).map((_, idx) => {
                           const isQuizLocked = idx > 6 && !activeCourse.midQuizPassed;
                           const isVideoLocked = idx > activeCourse.completedVideos;
                           const isLocked = isQuizLocked || isVideoLocked;
                           const isCurrent = idx === currentVideoIndex;
                           const isDone = idx < activeCourse.completedVideos;
-
                           return (
                             <div key={idx}>
                               <button
-                                style={{
-                                  width: '100%',
-                                  textAlign: 'left',
-                                  padding: '12px 14px',
-                                  marginBottom: '8px',
-                                  borderRadius: '10px',
-                                  border: isDone ? '1px solid #10b981' : isCurrent ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                                  fontSize: '13px',
-                                  cursor: isLocked ? 'not-allowed' : 'pointer',
-                                  background: isDone ? '#ecfdf5' : isCurrent ? 'var(--accent-light)' : 'var(--white)',
-                                  color: isDone ? '#059669' : isCurrent ? 'var(--accent)' : isLocked ? 'var(--text-muted)' : 'var(--text-secondary)',
-                                  fontWeight: (isDone || isCurrent) ? 700 : 500,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  transition: 'all 0.2s'
-                                }}
+                                className={`cp-video-item ${isCurrent ? 'cp-video-current' : ''} ${isDone ? 'cp-video-done' : ''} ${isLocked ? 'cp-video-locked' : ''}`}
                                 disabled={isLocked}
                                 onClick={() => {
                                   if (isLocked) return;
                                   setCurrentVideoIndex(idx);
-                                  if (idx < activeCourse.completedVideos) {
-                                    setVideoWatchProgress(100);
-                                  } else {
-                                    setVideoWatchProgress(0);
-                                  }
+                                  setVideoWatchProgress(idx < activeCourse.completedVideos ? 100 : 0);
                                   triggerToast(`▶ Now playing Video #${idx + 1}`);
                                 }}
                               >
-                                <span>{isDone ? `✓ Video #${idx + 1}` : isCurrent ? `▶ Playing Video #${idx + 1}` : `Video #${idx + 1}`}</span>
-                                {isLocked && <span style={{ fontSize: '10px', color: '#64748b' }}>🔒 Locked</span>}
+                                <div className="cp-video-item-left">
+                                  <div className={`cp-play-icon ${isCurrent ? 'cp-play-icon--active' : isDone ? 'cp-play-icon--done' : ''}`}>
+                                    {isDone ? '✓' : isCurrent ? '▶' : '▷'}
+                                  </div>
+                                  <div className="cp-video-item-info">
+                                    <span className="cp-video-item-title">{idx + 1}. {(activeCourse.videos && activeCourse.videos[idx] && !activeCourse.videos[idx].startsWith('data:') && !activeCourse.videos[idx].startsWith('/') && !activeCourse.videos[idx].startsWith('http')) ? activeCourse.videos[idx] : `Video #${idx + 1}`}</span>
+                                    <span className="cp-video-item-duration">🕐 {isCurrent ? currentVideoDuration : ['12:45','15:30','10:20','18:40','14:15','11:05','13:50','16:25','09:55','17:10','12:30','15:00'][idx]}</span>
+                                  </div>
+                                </div>
+                                <div className="cp-video-item-right">
+                                  {isCurrent && <span className="cp-watching-badge">● Watching</span>}
+                                  {isLocked && !isCurrent && <span className="cp-locked-badge">🔒 Locked</span>}
+                                </div>
                               </button>
-
-                              {/* Mid-Course Quiz Trigger Box */}
                               {idx === 5 && (
                                 <button
-                                  style={{
-                                    width: '100%',
-                                    margin: '2px 0 10px 0',
-                                    padding: '10px 14px',
-                                    borderRadius: '10px',
-                                    border: activeCourse.midQuizPassed ? '1px solid #10b981' : '1px solid #f59e0b',
-                                    background: activeCourse.midQuizPassed ? '#ecfdf5' : '#fffbeb',
-                                    color: activeCourse.midQuizPassed ? '#059669' : '#d97706',
-                                    fontSize: '12.5px',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s'
-                                  }}
-                                  onClick={() => {
-                                    setActiveQuizModal('mid');
-                                    setQuizAnswers({});
-                                    setQuizResult(null);
-                                    setIsRetakingQuiz(false);
-                                  }}
+                                  className={`cp-quiz-btn ${activeCourse.midQuizPassed ? 'cp-quiz-passed' : 'cp-quiz-pending'}`}
+                                  onClick={() => { setActiveQuizModal('mid'); setQuizAnswers({}); setQuizResult(null); setIsRetakingQuiz(false); }}
                                 >
-                                  📝 {activeCourse.midQuizPassed ? '✓ Mid Quiz Passed' : 'Take Mid-Course Quiz (Req.)'}
+                                  📝 {activeCourse.midQuizPassed ? '✓ Mid Quiz Passed' : 'Take Mid Course Quiz (Pass 1)'}
                                 </button>
                               )}
-
-                              {/* Final Quiz Trigger Button after Video 12 */}
                               {idx === 11 && (
                                 <button
-                                  style={{
-                                    width: '100%',
-                                    margin: '2px 0 10px 0',
-                                    padding: '10px 14px',
-                                    borderRadius: '10px',
-                                    border: activeCourse.finalQuizPassed ? '1px solid #10b981' : '1px solid var(--accent)',
-                                    background: activeCourse.finalQuizPassed ? '#ecfdf5' : 'var(--accent-light)',
-                                    color: activeCourse.finalQuizPassed ? '#059669' : 'var(--accent)',
-                                    fontSize: '12.5px',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s'
-                                  }}
-                                  onClick={() => {
-                                    setActiveQuizModal('final');
-                                    setQuizAnswers({});
-                                    setQuizResult(null);
-                                    setIsRetakingQuiz(false);
-                                  }}
+                                  className={`cp-quiz-btn ${activeCourse.finalQuizPassed ? 'cp-quiz-passed' : 'cp-quiz-pending cp-quiz-final'}`}
+                                  onClick={() => { setActiveQuizModal('final'); setQuizAnswers({}); setQuizResult(null); setIsRetakingQuiz(false); }}
                                 >
                                   🏆 {activeCourse.finalQuizPassed ? '✓ Final Quiz Passed' : 'Take Final Assessment Quiz'}
                                 </button>
@@ -1967,6 +1920,57 @@ Date: ${new Date().toLocaleDateString()}
                     )}
                   </div>
                 </form>
+              </div>
+            </div>
+          ) : activeTab === 'Course Catalog' ? (
+            <div className="db-tab-content-container">
+              <div className="tab-header-row">
+                <h3>Course Catalog</h3>
+                <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
+                  Explore and subscribe to courses. Subscribed courses will be added to your learning space.
+                </p>
+              </div>
+              <div className="courses-cards-grid">
+                {allPublishedCourses.filter(c => !isCourseAssignedToUser(c, user)).map(course => (
+                  <div key={course.id} className="custom-course-card">
+                    <div className="ccc-image-banner">
+                      <img 
+                        src={course.image || course.course_image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60'} 
+                        alt={course.title} 
+                        onError={(e) => {
+                          e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60';
+                        }}
+                      />
+                      <div className="ccc-banner-overlay">
+                        <span style={{ background: 'rgba(15, 23, 42, 0.85)', color: '#38bdf8', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, backdropFilter: 'blur(8px)', border: '1px solid rgba(56, 189, 248, 0.3)', textTransform: 'uppercase' }}>
+                          {course.category}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="ccc-body-content">
+                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', lineHeight: 1.4, minHeight: '42px' }}>{course.title}</h4>
+                      <p style={{ fontSize: '12px', color: '#64748b', margin: '8px 0 16px 0', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {course.course_description || 'Learn state-of-the-art industry-relevant concepts, practices, and skills.'}
+                      </p>
+                      
+                      <button 
+                        className="btn-ccc-action"
+                        style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}
+                        onClick={() => handleSubscribe(course)}
+                      >
+                        ✦ Subscribe to Course
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {allPublishedCourses.filter(c => !isCourseAssignedToUser(c, user)).length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: '#64748b', background: 'rgba(0,0,0,0.02)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                    <Compass size={40} style={{ color: '#94a3b8', marginBottom: '12px' }} />
+                    <h4 style={{ margin: '0 0 6px 0', color: '#334155' }}>No new courses available</h4>
+                    <p style={{ margin: 0, fontSize: '13px' }}>You are subscribed to all published courses in the system.</p>
+                  </div>
+                )}
               </div>
             </div>
           ) : null}
