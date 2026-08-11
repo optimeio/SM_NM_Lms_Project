@@ -124,7 +124,17 @@ async function connectDatabase() {
   console.log('ℹ️ MongoDB credentials contain <db_password> placeholder. Backend server is fully initialized & active on port 5000.');
 }
 
-connectDatabase();
+connectDatabase().catch(err => {
+  console.warn('⚠️ connectDatabase error (server still running):', err.message);
+});
+
+// Prevent any unhandled rejection from crashing the server
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Unhandled Promise Rejection (server kept alive):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception (server kept alive):', err.message);
+});
 
 // Default Admin User
 const DEFAULT_ADMIN = {
