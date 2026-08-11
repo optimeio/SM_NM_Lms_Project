@@ -292,11 +292,13 @@ app.post('/api/auth/login', async (req, res) => {
     let studentUser;
     if (inputUser && inputPass) {
       if (mongoose.connection.readyState === 1) {
+        const queryOr = [{ email: inputUser }, { phone: inputUser }];
+        if (mongoose.Types.ObjectId.isValid(inputUser)) {
+          queryOr.push({ _id: inputUser });
+        }
         studentUser = await User.findOne({
-          $and: [
-            { role: 'student' },
-            { $or: [{ email: inputUser }, { phone: inputUser }, { _id: inputUser }] }
-          ]
+          role: 'student',
+          $or: queryOr
         });
       } else {
         studentUser = memoryUsers.find(u => 
