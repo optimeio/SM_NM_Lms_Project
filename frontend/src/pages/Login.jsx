@@ -33,8 +33,6 @@ export default function Login() {
     const newErrors = {};
     if (!formData.username) newErrors.username = 'Register Number or Email ID is required';
     if (!formData.password) newErrors.password = 'Password is required';
-    if (!formData.clientKey) newErrors.clientKey = 'Client Key is required';
-    if (!formData.clientSecret) newErrors.clientSecret = 'Secret Key is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -228,42 +226,6 @@ export default function Login() {
           {serverError && <div className="login-error-alert">{serverError}</div>}
 
           <form onSubmit={handleSubmit} className="login-form">
-            {/* Client Key */}
-            <div className="login-input-group">
-              <label className="input-label">Client Key</label>
-              <div className="input-wrapper">
-                <User className="input-icon" size={17} />
-                <input
-                  type="text"
-                  name="clientKey"
-                  value={formData.clientKey}
-                  onChange={handleChange}
-                  placeholder="Enter Client Key"
-                  className={`login-input ${errors.clientKey ? 'has-error' : ''}`}
-                />
-              </div>
-              {errors.clientKey && <span className="input-error-msg">{errors.clientKey}</span>}
-            </div>
-
-            {/* Secret Key */}
-            <div className="login-input-group">
-              <label className="input-label">Secret Key</label>
-              <div className="input-wrapper">
-                <Lock className="input-icon" size={17} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="clientSecret"
-                  value={formData.clientSecret}
-                  onChange={handleChange}
-                  placeholder="Enter Secret Key"
-                  className={`login-input ${errors.clientSecret ? 'has-error' : ''}`}
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="password-toggle">
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
-              </div>
-              {errors.clientSecret && <span className="input-error-msg">{errors.clientSecret}</span>}
-            </div>
 
             {/* Username */}
             <div className="login-input-group">
