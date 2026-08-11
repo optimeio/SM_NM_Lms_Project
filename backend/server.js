@@ -1528,7 +1528,21 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-// Start Server
-app.listen(PORT, '0.0.0.0', () => {
+// Start Server — with graceful EADDRINUSE recovery
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Dedicated Backend Server listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    const fallback = Number(PORT) + 1;
+    console.warn(`⚠️  Port ${PORT} already in use. Retrying on port ${fallback}...`);
+    server.close();
+    app.listen(fallback, '0.0.0.0', () => {
+      console.log(`🚀 Dedicated Backend Server listening on http://localhost:${fallback}`);
+    });
+  } else {
+    console.error('❌ Server error:', err.message);
+    process.exit(1);
+  }
 });

@@ -4,10 +4,12 @@
   "description": "Root package for SM NM LMS Project",
   "private": true,
   "scripts": {
-    "dev": "npx concurrently \"npm run server\" \"npm run dev --prefix frontend\"",
+    "predev": "npx kill-port 5000 2>nul || true",
+    "dev": "npx concurrently --kill-others \"npm run server\" \"npm run dev --prefix frontend\"",
     "backend": "node backend/server.js",
     "server": "node backend/server.js",
     "build": "npm run build --prefix frontend",
+    "killport": "npx kill-port 5000",
     "install-all": "npm install --prefix frontend && npm install --prefix backend"
   },
   "devDependencies": {
