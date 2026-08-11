@@ -11,8 +11,12 @@ import '../styles/Auth.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [loginMode, setLoginMode] = useState('student'); // 'student' | 'admin'
-  const [formData, setFormData] = useState({ username: '', password: '', clientKey: '', clientSecret: '' });
+  const [formData, setFormData] = useState({ 
+    username: '', 
+    password: '', 
+    clientKey: '59e8bb42f89d5ee93ff466be97022427', 
+    clientSecret: 'f7a761767124aef8b904c49b52a555d6' 
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
@@ -27,13 +31,10 @@ export default function Login() {
 
   const validate = () => {
     const newErrors = {};
-    if (loginMode === 'admin') {
-      if (!formData.username) newErrors.username = 'Register Number or Email ID is required';
-      if (!formData.password) newErrors.password = 'Password is required';
-    } else {
-      if (!formData.clientKey) newErrors.clientKey = 'Client Key is required';
-      if (!formData.clientSecret) newErrors.clientSecret = 'Secret Key is required';
-    }
+    if (!formData.username) newErrors.username = 'Register Number or Email ID is required';
+    if (!formData.password) newErrors.password = 'Password is required';
+    if (!formData.clientKey) newErrors.clientKey = 'Client Key is required';
+    if (!formData.clientSecret) newErrors.clientSecret = 'Secret Key is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -52,74 +53,57 @@ export default function Login() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-      if (loginMode === 'admin') {
-        const inputUser = formData.username.trim().toLowerCase();
-        const inputPass = formData.password.trim();
+      const inputUser = formData.username.trim().toLowerCase();
+      const inputPass = formData.password.trim();
 
-        // 1. Admin Authentication Check
-        if (inputUser === 'thesmgroups@gmail.com' || inputUser === 'admin@smgroups.com') {
-          if (inputPass === 'TSMGPVT@2026') {
-            const adminObj = {
-              fullName: 'SM Groups Administrator',
-              email: 'thesmgroups@gmail.com',
-              role: 'admin',
-              college: 'The SM Groups Admin',
-              department: 'Administration'
-            };
-            localStorage.setItem('user', JSON.stringify(adminObj));
-            navigate('/admin');
-            return;
-          } else {
-            setServerError('Invalid Admin Password. Please check your admin credentials.');
-            setIsSubmitting(false);
-            return;
-          }
+      // 1. Admin Authentication Check
+      if (inputUser === 'thesmgroups@gmail.com' || inputUser === 'admin@smgroups.com') {
+        if (inputPass === 'TSMGPVT@2026') {
+          const adminObj = {
+            fullName: 'SM Groups Administrator',
+            email: 'thesmgroups@gmail.com',
+            role: 'admin',
+            college: 'The SM Groups Admin',
+            department: 'Administration'
+          };
+          localStorage.setItem('user', JSON.stringify(adminObj));
+          navigate('/admin');
+          return;
+        } else {
+          setServerError('Invalid Admin Password. Please check your admin credentials.');
+          setIsSubmitting(false);
+          return;
         }
-
-        // Try Backend Login for Admin
-        try {
-          const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: inputUser, password: inputPass })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success) {
-              localStorage.setItem('user', JSON.stringify(data.user));
-              navigate('/admin');
-              return;
-            }
-          }
-        } catch {}
-        setServerError('Invalid Admin credentials.');
-      } else {
-        // Student Login via Client Key & Secret Key
-        const key = formData.clientKey.trim();
-        const secret = formData.clientSecret.trim();
-
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            client_key: key,
-            client_secret: secret
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            localStorage.setItem('user', JSON.stringify(data.user));
-            if (data.token) {
-              localStorage.setItem('token', data.token);
-            }
-            navigate('/dashboard');
-            return;
-          }
-        }
-        setServerError('Invalid Client Key or Secret Key.');
       }
+
+      // 2. Student Login via Client Key & Secret Key + Credentials
+      const key = formData.clientKey.trim();
+      const secret = formData.clientSecret.trim();
+
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_key: key,
+          client_secret: secret,
+          username: inputUser,
+          password: inputPass
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          if (data.token) {
+            localStorage.setItem('token', data.token);
+          }
+          navigate('/dashboard');
+          return;
+        }
+      }
+      const errData = await res.json().catch(() => ({}));
+      setServerError(errData.message || 'Invalid Client Key, Secret Key, or Student Credentials.');
     } catch {
       setServerError('Something went wrong during login. Please try again.');
     } finally {
@@ -236,110 +220,87 @@ export default function Login() {
             <User size={28} />
           </div>
           
-          <h2 className="card-title">{loginMode === 'student' ? 'Student Login' : 'Admin Login'}</h2>
+          <h2 className="card-title">Student Login</h2>
           <p className="card-subtitle">
             Welcome Back!<br />Login to continue your learning journey.
           </p>
 
-          <div className="login-mode-toggle" style={{ display: 'flex', gap: '10px', width: '100%', marginBottom: '20px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px' }}>
-            <button
-              type="button"
-              onClick={() => { setLoginMode('student'); setServerError(''); setErrors({}); }}
-              style={{ flex: 1, padding: '8px', borderRadius: '6px', border: 'none', background: loginMode === 'student' ? 'var(--primary-red)' : 'none', color: '#fff', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-            >
-              Student Login
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginMode('admin'); setServerError(''); setErrors({}); }}
-              style={{ flex: 1, padding: '8px', borderRadius: '6px', border: 'none', background: loginMode === 'admin' ? 'var(--primary-red)' : 'none', color: '#fff', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-            >
-              Admin Login
-            </button>
-          </div>
-
           {serverError && <div className="login-error-alert">{serverError}</div>}
 
           <form onSubmit={handleSubmit} className="login-form">
-            {loginMode === 'student' ? (
-              <>
-                {/* Client Key */}
-                <div className="login-input-group">
-                  <label className="input-label">Client Key</label>
-                  <div className="input-wrapper">
-                    <User className="input-icon" size={17} />
-                    <input
-                      type="text"
-                      name="clientKey"
-                      value={formData.clientKey}
-                      onChange={handleChange}
-                      placeholder="Enter Client Key"
-                      className={`login-input ${errors.clientKey ? 'has-error' : ''}`}
-                    />
-                  </div>
-                  {errors.clientKey && <span className="input-error-msg">{errors.clientKey}</span>}
-                </div>
+            {/* Client Key */}
+            <div className="login-input-group">
+              <label className="input-label">Client Key</label>
+              <div className="input-wrapper">
+                <User className="input-icon" size={17} />
+                <input
+                  type="text"
+                  name="clientKey"
+                  value={formData.clientKey}
+                  onChange={handleChange}
+                  placeholder="Enter Client Key"
+                  className={`login-input ${errors.clientKey ? 'has-error' : ''}`}
+                />
+              </div>
+              {errors.clientKey && <span className="input-error-msg">{errors.clientKey}</span>}
+            </div>
 
-                {/* Secret Key */}
-                <div className="login-input-group">
-                  <label className="input-label">Secret Key</label>
-                  <div className="input-wrapper">
-                    <Lock className="input-icon" size={17} />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      name="clientSecret"
-                      value={formData.clientSecret}
-                      onChange={handleChange}
-                      placeholder="Enter Secret Key"
-                      className={`login-input ${errors.clientSecret ? 'has-error' : ''}`}
-                    />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="password-toggle">
-                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                    </button>
-                  </div>
-                  {errors.clientSecret && <span className="input-error-msg">{errors.clientSecret}</span>}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Username */}
-                <div className="login-input-group">
-                  <label className="input-label">Email Address</label>
-                  <div className="input-wrapper">
-                    <User className="input-icon" size={17} />
-                    <input
-                      type="text"
-                      name="username"
-                      value={formData.username}
-                      onChange={handleChange}
-                      placeholder="Enter email address"
-                      className={`login-input ${errors.username ? 'has-error' : ''}`}
-                    />
-                  </div>
-                  {errors.username && <span className="input-error-msg">{errors.username}</span>}
-                </div>
+            {/* Secret Key */}
+            <div className="login-input-group">
+              <label className="input-label">Secret Key</label>
+              <div className="input-wrapper">
+                <Lock className="input-icon" size={17} />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="clientSecret"
+                  value={formData.clientSecret}
+                  onChange={handleChange}
+                  placeholder="Enter Secret Key"
+                  className={`login-input ${errors.clientSecret ? 'has-error' : ''}`}
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="password-toggle">
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+              {errors.clientSecret && <span className="input-error-msg">{errors.clientSecret}</span>}
+            </div>
 
-                {/* Password */}
-                <div className="login-input-group">
-                  <label className="input-label">Password</label>
-                  <div className="input-wrapper">
-                    <Lock className="input-icon" size={17} />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      name="password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      placeholder="Enter your password"
-                      className={`login-input ${errors.password ? 'has-error' : ''}`}
-                    />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="password-toggle">
-                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                    </button>
-                  </div>
-                  {errors.password && <span className="input-error-msg">{errors.password}</span>}
-                </div>
-              </>
-            )}
+            {/* Username */}
+            <div className="login-input-group">
+              <label className="input-label">Register Number / Email</label>
+              <div className="input-wrapper">
+                <User className="input-icon" size={17} />
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder="Enter Register Number or Email"
+                  className={`login-input ${errors.username ? 'has-error' : ''}`}
+                />
+              </div>
+              {errors.username && <span className="input-error-msg">{errors.username}</span>}
+            </div>
+
+            {/* Password */}
+            <div className="login-input-group">
+              <label className="input-label">Password</label>
+              <div className="input-wrapper">
+                <Lock className="input-icon" size={17} />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Enter your password"
+                  className={`login-input ${errors.password ? 'has-error' : ''}`}
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="password-toggle">
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+              {errors.password && <span className="input-error-msg">{errors.password}</span>}
+            </div>
 
             <button type="submit" disabled={isSubmitting} className="btn-login-submit">
               {isSubmitting ? 'Logging in...' : 'Login'}

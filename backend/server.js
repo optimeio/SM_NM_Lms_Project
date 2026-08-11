@@ -249,26 +249,68 @@ app.post('/api/auth/register', async (req, res) => {
   return res.status(400).json({ success: false, message: 'Student registration is disabled. Please login using a valid Client Key and Secret Key.' });
 });
 
-// 3. Auth: Login (Student via Keys & Admin via Email/Password)
+// 3. Auth: Login (Student via Keys/Credentials & Admin via Email/Password)
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password, client_key, client_secret, clientKey, clientSecret } = req.body;
+    
+    const inputUser = (username || '').trim().toLowerCase();
+    const inputPass = (password || '').trim();
     const key = (client_key || clientKey || '').trim();
     const secret = (client_secret || clientSecret || '').trim();
 
-    // If Client Key and Secret Key are provided, perform key-based student authentication
-    if (key || secret) {
-      const isValidKey = VALID_CLIENT_KEYS.includes(key);
-      const isValidSecret = VALID_CLIENT_SECRETS.includes(secret);
+    // 1. Admin Credentials Authentication Check
+    const adminEmail = (DEFAULT_ADMIN.email || '').toLowerCase();
+    if (inputUser === adminEmail || inputUser === 'admin@smgroups.com') {
+      if (inputPass === DEFAULT_ADMIN.password) {
+        const adminObj = {
+          _id: 'admin-1',
+          fullName: DEFAULT_ADMIN.fullName,
+          email: adminEmail,
+          role: 'admin',
+          college: DEFAULT_ADMIN.college,
+          department: DEFAULT_ADMIN.department
+        };
+        return res.json({ success: true, user: adminObj });
+      } else {
+        return res.status(401).json({ success: false, message: 'Invalid Admin Password.' });
+      }
+    }
 
-      if (!isValidKey || !isValidSecret) {
-        return res.status(401).json({ success: false, message: 'Invalid Client Key or Secret Key.' });
+    // 2. Student Authentication (Requires valid Client Key & Secret Key)
+    if (!key || !secret) {
+      return res.status(400).json({ success: false, message: 'Client Key and Secret Key are required for student login.' });
+    }
+
+    const isValidKey = VALID_CLIENT_KEYS.includes(key);
+    const isValidSecret = VALID_CLIENT_SECRETS.includes(secret);
+
+    if (!isValidKey || !isValidSecret) {
+      return res.status(401).json({ success: false, message: 'Invalid Client Key or Secret Key.' });
+    }
+
+    let studentUser;
+    if (inputUser && inputPass) {
+      if (mongoose.connection.readyState === 1) {
+        studentUser = await User.findOne({
+          $and: [
+            { role: 'student' },
+            { $or: [{ email: inputUser }, { phone: inputUser }, { _id: inputUser }] }
+          ]
+        });
+      } else {
+        studentUser = memoryUsers.find(u => 
+          u.role === 'student' && 
+          (u.email === inputUser || u.phone === inputUser || u._id === inputUser)
+        );
       }
 
-      // Look up default student user or create one
+      if (!studentUser || studentUser.password !== inputPass) {
+        return res.status(401).json({ success: false, message: 'Invalid Student Username or Password.' });
+      }
+    } else {
+      // Fallback: Default student user if no individual credentials provided
       const defaultEmail = 'student@nm.student.local';
-      let studentUser;
-
       if (mongoose.connection.readyState === 1) {
         studentUser = await User.findOne({ email: defaultEmail });
         if (!studentUser) {
@@ -300,38 +342,10 @@ app.post('/api/auth/login', async (req, res) => {
           saveUsersToFile();
         }
       }
-
-      const access = jwt.sign({ client_key: key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
-      return res.json({ success: true, user: studentUser, token: access });
     }
 
-    // Otherwise, require email/password for Admin login
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Email/Register Number and Password are required.' });
-    }
-
-    const inputUser = username.trim().toLowerCase();
-    const inputPass = password.trim();
-
-    // Admin Credentials Authentication
-    const adminEmail = (DEFAULT_ADMIN.email || '').toLowerCase();
-    if (inputUser === adminEmail || inputUser === 'admin@smgroups.com') {
-      if (inputPass === DEFAULT_ADMIN.password) {
-        const adminObj = {
-          _id: 'admin-1',
-          fullName: DEFAULT_ADMIN.fullName,
-          email: adminEmail,
-          role: 'admin',
-          college: DEFAULT_ADMIN.college,
-          department: DEFAULT_ADMIN.department
-        };
-        return res.json({ success: true, user: adminObj });
-      } else {
-        return res.status(401).json({ message: 'Invalid Admin Password.' });
-      }
-    }
-
-    return res.status(401).json({ message: 'Invalid credentials or registration is disabled.' });
+    const access = jwt.sign({ client_key: key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
+    return res.json({ success: true, user: studentUser, token: access });
   } catch (err) {
     console.error('Login API Error:', err);
     res.status(500).json({ message: 'Server error during login.' });
