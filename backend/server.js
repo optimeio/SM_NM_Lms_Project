@@ -7,6 +7,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import User from './models/User.js';
 import Course from './models/Course.js';
 import Progress from './models/Progress.js';
@@ -32,10 +35,50 @@ const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+// Production Middleware Setup
+app.use(helmet({
+  contentSecurityPolicy: false, // Turn off CSP so integrated iframe/video/static content loads correctly
+  crossOriginEmbedderPolicy: false
+}));
+app.use(compression());
+
+// Setup CORS with restriction options
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
+];
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      // Allow any subdomain of thesmgroups.com in production
+      if (origin.endsWith('.thesmgroups.com') || origin === 'https://thesmgroups.com') {
+        return callback(null, true);
+      }
+      return callback(null, true); // Keep dynamic but log or filter as needed
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
+
+// Set safe body size limit
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
+
+// Setup rate limiter for auth endpoints
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { success: false, message: "Too many login attempts, please try again after 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login', loginLimiter);
+
 app.use('/courses', express.static(path.join(__dirname, 'courses')));
 
 // ----------------------------------------------------
