@@ -4,7 +4,7 @@ import {
   LayoutDashboard, BookOpen, Video, FileText, GraduationCap, Award, FolderOpen, 
   Trophy, MessageSquare, Calendar, User, Settings, LogOut, Search, Bell, ChevronDown,
   Megaphone, ShieldCheck, Play, BookOpenCheck, Medal, Menu, X, Code2, Cpu, Wifi,
-  Settings2, Compass, BarChart3, Sparkles, Mail, Phone, Landmark, Camera, CheckCircle2,
+  Settings2, BarChart3, Sparkles, Mail, Phone, Landmark, Camera, CheckCircle2,
   Save, Contact
 } from 'lucide-react';
 import html2canvas from 'html2canvas';

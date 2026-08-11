@@ -41,5 +41,21 @@
       "Python3"
     ],
     "course_unique_code": "Python3"
+  },
+  {
+    "_id": "test@test.com",
+    "user_unique_id": "test@test.com",
+    "fullName": "NM Student",
+    "email": "test@test.com@nm.student.local",
+    "password": "nm_sso_login",
+    "college": "",
+    "department": "",
+    "district": "",
+    "university": "",
+    "role": "student",
+    "assignedCourses": [
+      "TSMG2026IOT"
+    ],
+    "course_unique_code": "TSMG2026IOT"
   }
 ]
