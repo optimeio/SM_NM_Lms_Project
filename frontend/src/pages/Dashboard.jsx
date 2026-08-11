@@ -291,56 +291,12 @@ Date: ${new Date().toLocaleDateString()}
   const menuItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'My Courses', icon: <BookOpen size={20} /> },
-    { name: 'Course Catalog', icon: <Compass size={20} /> },
     { name: 'Certificates', icon: <Award size={20} /> },
     { name: 'Messages', icon: <MessageSquare size={20} /> },
     { name: 'Profile', icon: <User size={20} /> },
   ];
   const [allCoursesData, setAllCoursesData] = useState([]);
-  const [allPublishedCourses, setAllPublishedCourses] = useState([]);
 
-  const handleSubscribe = async (course) => {
-    try {
-      const userId = user.email || user.user_unique_id || 'student_123';
-      const res = await fetch('/tnskill/api/course/subscribe/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          course_id: course.course_unique_code || course.id
-        })
-      });
-      const data = await res.json();
-      if (data.subscription_registration_status) {
-        triggerToast(`🎉 Successfully subscribed to ${course.title || course.name}!`);
-        
-        // Update user state to reload courses
-        const updatedUser = {
-          ...user,
-          assignedCourses: [...(user.assignedCourses || []), course.course_unique_code || course.id]
-        };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        
-        // Sync with registeredUsers in localStorage
-        const storedUsersRaw = localStorage.getItem('registeredUsers');
-        if (storedUsersRaw) {
-          const registeredUsers = JSON.parse(storedUsersRaw);
-          const updatedUsers = registeredUsers.map(u => 
-            (u.email && u.email.toLowerCase() === userId.toLowerCase()) || (u._id && String(u._id) === String(userId))
-              ? { ...u, assignedCourses: [...(u.assignedCourses || []), course.course_unique_code || course.id] }
-              : u
-          );
-          localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
-        }
-      } else {
-        triggerToast('❌ Subscription failed. Please try again.');
-      }
-    } catch (err) {
-      console.error('Subscription error:', err);
-      triggerToast('❌ Error connecting to subscription server.');
-    }
-  };
 
   const [activeCourse, setActiveCourse] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -528,11 +484,9 @@ Date: ${new Date().toLocaleDateString()}
           } catch {}
         }
 
-        // Filter courses: ONLY show courses that are PUBLISHED AND ASSIGNED to this student/department/college/all
+        // Filter courses: ONLY show courses that are PUBLISHED AND ASSIGNED to this student
         const visibleCourses = hydratedCourses.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
         setAllCoursesData(visibleCourses);
-        const publishedCourses = hydratedCourses.filter(c => isCoursePublished(c));
-        setAllPublishedCourses(publishedCourses);
       } catch {
         if (localMapped.length > 0) {
           let latestUser = user;
@@ -549,8 +503,6 @@ Date: ${new Date().toLocaleDateString()}
           }
           const visibleCourses = localMapped.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
           setAllCoursesData(visibleCourses);
-          const publishedCourses = localMapped.filter(c => isCoursePublished(c));
-          setAllPublishedCourses(publishedCourses);
         }
       }
     };
@@ -1920,57 +1872,6 @@ Date: ${new Date().toLocaleDateString()}
                     )}
                   </div>
                 </form>
-              </div>
-            </div>
-          ) : activeTab === 'Course Catalog' ? (
-            <div className="db-tab-content-container">
-              <div className="tab-header-row">
-                <h3>Course Catalog</h3>
-                <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
-                  Explore and subscribe to courses. Subscribed courses will be added to your learning space.
-                </p>
-              </div>
-              <div className="courses-cards-grid">
-                {allPublishedCourses.filter(c => !isCourseAssignedToUser(c, user)).map(course => (
-                  <div key={course.id} className="custom-course-card">
-                    <div className="ccc-image-banner">
-                      <img 
-                        src={course.image || course.course_image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60'} 
-                        alt={course.title} 
-                        onError={(e) => {
-                          e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60';
-                        }}
-                      />
-                      <div className="ccc-banner-overlay">
-                        <span style={{ background: 'rgba(15, 23, 42, 0.85)', color: '#38bdf8', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, backdropFilter: 'blur(8px)', border: '1px solid rgba(56, 189, 248, 0.3)', textTransform: 'uppercase' }}>
-                          {course.category}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="ccc-body-content">
-                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', lineHeight: 1.4, minHeight: '42px' }}>{course.title}</h4>
-                      <p style={{ fontSize: '12px', color: '#64748b', margin: '8px 0 16px 0', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {course.course_description || 'Learn state-of-the-art industry-relevant concepts, practices, and skills.'}
-                      </p>
-                      
-                      <button 
-                        className="btn-ccc-action"
-                        style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}
-                        onClick={() => handleSubscribe(course)}
-                      >
-                        ✦ Subscribe to Course
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {allPublishedCourses.filter(c => !isCourseAssignedToUser(c, user)).length === 0 && (
-                  <div style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: '#64748b', background: 'rgba(0,0,0,0.02)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
-                    <Compass size={40} style={{ color: '#94a3b8', marginBottom: '12px' }} />
-                    <h4 style={{ margin: '0 0 6px 0', color: '#334155' }}>No new courses available</h4>
-                    <p style={{ margin: 0, fontSize: '13px' }}>You are subscribed to all published courses in the system.</p>
-                  </div>
-                )}
               </div>
             </div>
           ) : null}
