@@ -1,7 +1,16 @@
 node_modules/
 dist/
 *.log
+
+# Environment variables — NEVER commit these (contain secrets)
 .env
 .env.local
 .env.*.local
+backend/.env
+frontend/.env
+**/.env
+**/.env.local
+
+# OS
 .DS_Store
+Thumbs.db
