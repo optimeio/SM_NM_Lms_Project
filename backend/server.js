@@ -140,13 +140,35 @@ async function syncManifestsToMongoDB() {
   }
 }
 
+async function syncUsersToMongoDB() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    let synced = 0;
+    for (const userObj of memoryUsers) {
+      const existing = await User.findOne({ email: userObj.email });
+      if (!existing) {
+        const userToInsert = { ...userObj };
+        if (userToInsert._id && !mongoose.Types.ObjectId.isValid(userToInsert._id)) {
+          delete userToInsert._id;
+        }
+        await User.create(userToInsert);
+        synced++;
+      }
+    }
+    if (synced > 0) console.log(`🔄 Synced ${synced} user(s) from users.json → MongoDB.`);
+  } catch (err) {
+    console.warn('Could not sync users to MongoDB:', err.message);
+  }
+}
+
 async function connectDatabase() {
   if (primaryURI && !primaryURI.includes('<db_password>')) {
     try {
       await mongoose.connect(primaryURI);
       console.log('✅ Connected to MongoDB Atlas via Primary SRV Connection');
-      // Sync disk manifests → MongoDB so any manual JSON edits take effect
+      // Sync disk manifests & users → MongoDB
       await syncManifestsToMongoDB();
+      await syncUsersToMongoDB();
       return;
     } catch (err) {
       console.warn('⚠️ Primary MongoDB Connection error:', err.message);
@@ -157,8 +179,9 @@ async function connectDatabase() {
     try {
       await mongoose.connect(fallbackURI);
       console.log('✅ Connected to MongoDB Atlas via Seed List Fallback Connection');
-      // Sync disk manifests → MongoDB so any manual JSON edits take effect
+      // Sync disk manifests & users → MongoDB
       await syncManifestsToMongoDB();
+      await syncUsersToMongoDB();
       return;
     } catch (err) {
       console.warn('⚠️ Fallback MongoDB Connection error:', err.message);
