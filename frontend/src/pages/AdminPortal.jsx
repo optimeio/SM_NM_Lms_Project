@@ -149,16 +149,16 @@ export default function AdminPortal() {
 
   const fetchCourses = async () => {
     try {
-      const res = await fetch('/lms/client/courses/');
+      const res = await fetch('/api/lms/client/courses/');
       if (!res.ok) { setCourses([]); return; }
       let data = {};
       try { data = await res.json(); } catch { setCourses([]); return; }
       if (data.success || data.courses_list) {
         const list = data.courses_list || data.courses || [];
         const apiMapped = list.map(c => ({
-          _id: c.course_id || c._id,
-          id: c.course_id || c.id,
-          course_unique_code: c.course_id || c.course_unique_code,
+          _id: c._id || c.course_id,
+          id: c.id || c.course_id,
+          course_unique_code: c.course_unique_code || c.course_id,
           title: c.name || c.course_name || c.title,
           category: c.category || 'General',
           instructor: c.instructor || 'Instructor',
@@ -265,7 +265,7 @@ export default function AdminPortal() {
     setIsGeneratingToken(true);
     setTokenResult(null);
     try {
-      const res = await fetch('/lms/client/token/', {
+      const res = await fetch('/api/lms/client/token/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -306,7 +306,7 @@ export default function AdminPortal() {
       console.error('Token API Error:', err);
       setTokenResult({
         success: false,
-        message: 'Network error connecting to /lms/client/token/',
+        message: 'Network error connecting to /api/lms/client/token/',
         responseRaw: String(err)
       });
       showToast('Network error generating token', 'error');
@@ -824,7 +824,7 @@ export default function AdminPortal() {
         bodyString = JSON.stringify(sanitizedPayload);
       }
 
-      const endpoint = isPublish ? '/lms/client/course/publish/' : '/lms/client/course/save-draft/';
+      const endpoint = isPublish ? '/api/lms/client/course/publish/' : '/api/lms/client/course/save-draft/';
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -890,7 +890,7 @@ export default function AdminPortal() {
 
   const handleQuickPublish = async (course) => {
     try {
-      const res = await fetch('/lms/client/course/publish/', {
+      const res = await fetch('/api/lms/client/course/publish/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -390,7 +390,7 @@ Date: ${new Date().toLocaleDateString()}
         const localProgressRaw = localStorage.getItem('userCourseProgress') || '{}';
         const localProgressMap = JSON.parse(localProgressRaw);
 
-        const res = await fetch('/lms/client/courses/', {
+        const res = await fetch('/api/lms/client/courses/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token') || 'sm_nm_token_2026'}`
           }
@@ -402,8 +402,8 @@ Date: ${new Date().toLocaleDateString()}
           if (data.success || data.courses_list) {
             const list = data.courses_list || data.courses || [];
             const apiMapped = list.map((c, idx) => ({
-              id: c.course_id || c._id || c.id || idx,
-              course_unique_code: c.course_id || c.course_unique_code || `COURSE-${idx}`,
+              id: c._id || c.id || c.course_id || idx,
+              course_unique_code: c.course_unique_code || c.course_id || `COURSE-${idx}`,
               title: c.name || c.course_name || c.title,
               category: c.category || 'General',
               image: c.course_image_url || c.image,

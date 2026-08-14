@@ -1101,7 +1101,7 @@ app.get([
         const enrolledCount = Math.max(assignedCount, trackedCount, 0);
         return {
           name: c.course_name || c.title,
-          course_id: c.course_unique_code,
+          course_id: c._id ? c._id.toString() : new mongoose.Types.ObjectId().toString(),
           course_unique_code: c.course_unique_code,
           reference_id: c.reference_id || '',
           course_status: c.is_active,
@@ -1147,7 +1147,7 @@ app.get([
         const enrolledCount = Math.max(assignedCount, trackedCount, 0);
         return {
           name: c.course_name,
-          course_id: c.course_unique_code,
+          course_id: c._id ? c._id.toString() : new mongoose.Types.ObjectId().toString(),
           course_unique_code: c.course_unique_code,
           reference_id: c.reference_id || '',
           course_status: c.is_active,
