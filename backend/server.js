@@ -33,7 +33,8 @@ const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
 
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+app.set('trust proxy', 1);
+const PORT = 5003;
 
 // Production Middleware Setup
 app.use(helmet({
@@ -102,20 +103,35 @@ async function syncManifestsToMongoDB() {
         const courseObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
         if (!courseObj || !courseObj.course_unique_code) continue;
 
-        // Also load midQuiz.json and finalQuiz.json if they exist and are more complete
-        const midQuizPath = path.join(coursesDir, folder, 'midQuiz.json');
-        const finalQuizPath = path.join(coursesDir, folder, 'finalQuiz.json');
-        if (fs.existsSync(midQuizPath)) {
-          try {
-            const mq = JSON.parse(fs.readFileSync(midQuizPath, 'utf8'));
-            if (mq && mq.questions && mq.questions.length > 0) courseObj.midQuiz = mq;
-          } catch (e) { /* ignore invalid json */ }
+        // Load supplemental files
+        const filesToLoad = [
+          { key: 'midQuiz', file: 'midQuiz.json' },
+          { key: 'finalQuiz', file: 'finalQuiz.json' },
+          { key: 'course_content', file: 'course_content.json' },
+          { key: 'course_objective', file: 'course_objective.json' }
+        ];
+        for (const { key, file } of filesToLoad) {
+          const filePath = path.join(coursesDir, folder, file);
+          if (fs.existsSync(filePath)) {
+            try {
+              const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+              if (data) {
+                courseObj[key] = data;
+              }
+            } catch (e) { /* ignore invalid json */ }
+          }
         }
-        if (fs.existsSync(finalQuizPath)) {
-          try {
-            const fq = JSON.parse(fs.readFileSync(finalQuizPath, 'utf8'));
-            if (fq && fq.questions && fq.questions.length > 0) courseObj.finalQuiz = fq;
-          } catch (e) { /* ignore invalid json */ }
+
+        // Check physical media folders
+        const pptsFolder = path.join(coursesDir, folder, 'ppts');
+        if (fs.existsSync(pptsFolder) && (!courseObj.ppts || courseObj.ppts.length === 0)) {
+          const pptFiles = fs.readdirSync(pptsFolder).filter(f => !f.startsWith('.'));
+          if (pptFiles.length > 0) courseObj.ppts = pptFiles.map(f => `/courses/${folder}/ppts/${f}`);
+        }
+        const vidsFolder = path.join(coursesDir, folder, 'videos');
+        if (fs.existsSync(vidsFolder) && (!courseObj.videos || courseObj.videos.length === 0)) {
+          const vidFiles = fs.readdirSync(vidsFolder).filter(f => !f.startsWith('.'));
+          if (vidFiles.length > 0) courseObj.videos = vidFiles.map(f => `/courses/${folder}/videos/${f}`);
         }
 
         await Course.findOneAndUpdate(
@@ -188,7 +204,7 @@ async function connectDatabase() {
     }
   }
 
-  console.log('ℹ️ MongoDB credentials contain <db_password> placeholder. Backend server is fully initialized & active on port 5000.');
+  console.log(`ℹ️ MongoDB credentials contain <db_password> placeholder. Backend server is fully initialized & active on port ${PORT}.`);
 }
 
 connectDatabase().catch(err => {
@@ -275,15 +291,34 @@ function loadPersistentData() {
           try {
             const courseObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
             if (courseObj && courseObj.course_unique_code) {
+              // Load supplemental files
+              const filesToLoad = [
+                { key: 'midQuiz', file: 'midQuiz.json' },
+                { key: 'finalQuiz', file: 'finalQuiz.json' },
+                { key: 'course_content', file: 'course_content.json' },
+                { key: 'course_objective', file: 'course_objective.json' }
+              ];
+              for (const { key, file } of filesToLoad) {
+                const filePath = path.join(coursesDir, folder, file);
+                if (fs.existsSync(filePath)) {
+                  try {
+                    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    if (data && (Array.isArray(data) ? data.length > 0 : (data.questions && data.questions.length > 0))) {
+                      courseObj[key] = data;
+                    }
+                  } catch (e) { /* ignore invalid json */ }
+                }
+              }
+
               const pptsFolder = path.join(coursesDir, folder, 'ppts');
               if (fs.existsSync(pptsFolder) && (!courseObj.ppts || courseObj.ppts.length === 0)) {
                 const pptFiles = fs.readdirSync(pptsFolder).filter(f => !f.startsWith('.'));
-                courseObj.ppts = pptFiles.map(f => `/courses/${folder}/ppts/${f}`);
+                if (pptFiles.length > 0) courseObj.ppts = pptFiles.map(f => `/courses/${folder}/ppts/${f}`);
               }
               const vidsFolder = path.join(coursesDir, folder, 'videos');
               if (fs.existsSync(vidsFolder) && (!courseObj.videos || courseObj.videos.length === 0)) {
                 const vidFiles = fs.readdirSync(vidsFolder).filter(f => !f.startsWith('.'));
-                courseObj.videos = vidFiles.map(f => `/courses/${folder}/videos/${f}`);
+                if (vidFiles.length > 0) courseObj.videos = vidFiles.map(f => `/courses/${folder}/videos/${f}`);
               }
               const existingIdx = memoryCourses.findIndex(c => c.course_unique_code === courseObj.course_unique_code);
               if (existingIdx >= 0) {
@@ -440,7 +475,7 @@ app.post('/api/auth/login', async (req, res) => {
 // TOKEN RETRIEVAL & REFRESH ENDPOINTS (/api/v1/lms/client/token/)
 // ----------------------------------------------------
 
-app.post(['/lms/client/token/', '/api/lms/client/token/', '/api/v1/lms/client/token/', '/token/'], upload.none(), (req, res) => {
+app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/api/lms/client/token/', '/api/v1/lms/client/token', '/api/v1/lms/client/token/', '/token', '/token/'], (req, res) => {
   const body = req.body || {};
   const client_key = (body.client_key || body.clientKey || '').trim();
   const client_secret = (body.client_secret || body.clientSecret || '').trim();
@@ -667,7 +702,7 @@ app.delete('/api/admin/users/:identifier', async (req, res) => {
       try {
         const query = mongoose.Types.ObjectId.isValid(decodedId) 
           ? { _id: decodedId }
-          : { email: decodedId };
+          : { $or: [{ email: decodedId }, { user_unique_id: decodedId }] };
 
         await User.findOneAndDelete(query);
       } catch (err) {
@@ -675,9 +710,12 @@ app.delete('/api/admin/users/:identifier', async (req, res) => {
       }
     }
 
-    memoryUsers = memoryUsers.filter(u => 
-      String(u._id).toLowerCase() !== decodedId && (u.email && u.email.toLowerCase() !== decodedId)
-    );
+    memoryUsers = memoryUsers.filter(u => {
+      const matchId = String(u._id).toLowerCase() === decodedId;
+      const matchEmail = u.email && u.email.toLowerCase() === decodedId;
+      const matchUniqueId = u.user_unique_id && String(u.user_unique_id).toLowerCase() === decodedId;
+      return !(matchId || matchEmail || matchUniqueId);
+    });
     saveUsersToFile();
 
     return res.json({ success: true, message: 'Student deleted successfully.' });
@@ -702,7 +740,25 @@ const authenticateTokenHeader = (req, res, next) => {
 };
 
 
-const TNSKILL_BASE = process.env.TNSKILL_BASE || 'https://sandbox-api.skilldevelopment.tn.gov.in';
+const TNSKILL_BASES = (process.env.TNSKILL_BASE || 'https://api.skilldevelopment.tn.gov.in,https://api.skilldevelopment.in').split(',');
+
+async function getExternalToken(baseUrl) {
+  try {
+    const res = await fetch(`${baseUrl.trim()}/api/v1/lms/client/token/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_key: process.env.CLIENT_KEY || '59e8bb42f89d5ee93ff466be97022427',
+        client_secret: process.env.CLIENT_SECRET || 'f7a761767124aef8b904c49b52a555d6'
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    return data.access_key || data.access || data.token || '';
+  } catch (err) {
+    console.error('Error fetching external token for', baseUrl, ':', err.message);
+    return '';
+  }
+}
 
 
 // Helper to save base64 videos/ppts to physical files on disk
@@ -807,6 +863,8 @@ app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'
       videos: savedVideos,     // Clean paths
       ppts: savedPpts,         // Clean paths
       folderPath: courseDir,
+      course_content: body.course_content || [],
+      course_objective: body.course_objective || [],
       midQuiz: body.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
       finalQuiz: body.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] }
     };
@@ -820,20 +878,21 @@ app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'
 
     // Save to MongoDB
     if (mongoose.connection.readyState === 1) {
-      const saved = await Course.findOneAndUpdate(
+      await Course.findOneAndUpdate(
         { course_unique_code },
         courseData,
         { upsert: true, new: true }
       );
-      return res.status(200).json({ status: true, message: 'Course saved as draft.', draft: true, course: saved });
+    } else {
+      // Fallback: sync memory store
+      const idx = memoryCourses.findIndex(c => c.course_unique_code === course_unique_code);
+      if (idx >= 0) memoryCourses[idx] = { ...memoryCourses[idx], ...courseData };
+      else memoryCourses.push(courseData);
     }
 
-    // Fallback: sync memory store
-    const idx = memoryCourses.findIndex(c => c.course_unique_code === course_unique_code);
-    if (idx >= 0) memoryCourses[idx] = { ...memoryCourses[idx], ...courseData };
-    else memoryCourses.push(courseData);
-
-    return res.status(200).json({ status: true, message: 'Course saved as draft (local).', draft: true, course: courseData });
+    return res.status(200).json({
+      message: 'Course saved as draft.'
+    });
   } catch (err) {
     console.error('Save Draft Error:', err);
     return res.status(500).json({ status: false, message: 'Server error saving draft.' });
@@ -842,22 +901,24 @@ app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'
 
 // ----------------------------------------------------
 // TNSKILL PROXY: POST /api/student/subscribe
-// Forwards to: https://sandbox-api.tnskill.tn.gov.in/skilldevelopment/api/course/subscribe/
+// Forwards to: https://api.skilldevelopment.tn.gov.in/skilldevelopment/api/course/subscribe/
 // ----------------------------------------------------
 app.post(['/api/student/subscribe', '/lms/client/course/subscribe/'], async (req, res) => {
   const body = req.body || {};
   const authHeader = req.headers['authorization'] || '';
   try {
-    const tnRes = await fetch(`${TNSKILL_BASE}/skilldevelopment/api/course/subscribe/`, {
+    const responses = await Promise.all(TNSKILL_BASES.map(base => fetch(`${base.trim()}/skilldevelopment/api/course/subscribe/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': authHeader.startsWith('Bearer ') ? authHeader : `Bearer ${authHeader}`
       },
       body: JSON.stringify(body)
-    });
-    if (tnRes.ok) {
-      const tnData = await tnRes.json().catch(() => ({}));
+    }).catch(() => null)));
+    
+    const validRes = responses.find(r => r && r.ok);
+    if (validRes) {
+      const tnData = await validRes.json().catch(() => ({}));
       return res.status(200).json({
         subscription_registration_status: tnData.subscription_registration_status ?? true,
         subscription_reference_id: tnData.subscription_reference_id || `LOCAL-${Date.now()}`,
@@ -881,22 +942,24 @@ app.post(['/api/student/subscribe', '/lms/client/course/subscribe/'], async (req
 
 // ----------------------------------------------------
 // TNSKILL PROXY: POST /api/student/course-access
-// Forwards to: https://sandbox-api.tnskill.tn.gov.in/skilldevelopment/api/course/access/
+// Forwards to: https://api.skilldevelopment.tn.gov.in/skilldevelopment/api/course/access/
 // ----------------------------------------------------
 app.post(['/api/student/course-access', '/lms/client/course/access/'], async (req, res) => {
   const body = req.body || {};
   const authHeader = req.headers['authorization'] || '';
   try {
-    const tnRes = await fetch(`${TNSKILL_BASE}/skilldevelopment/api/course/access/`, {
+    const responses = await Promise.all(TNSKILL_BASES.map(base => fetch(`${base.trim()}/skilldevelopment/api/course/access/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': authHeader.startsWith('Bearer ') ? authHeader : `Bearer ${authHeader}`
       },
       body: JSON.stringify(body)
-    });
-    if (tnRes.ok) {
-      const tnData = await tnRes.json().catch(() => ({}));
+    }).catch(() => null)));
+
+    const validRes = responses.find(r => r && r.ok);
+    if (validRes) {
+      const tnData = await validRes.json().catch(() => ({}));
       return res.status(200).json({
         access_status: tnData.access_status ?? true,
         access_url: tnData.access_url || null,
@@ -911,7 +974,7 @@ app.post(['/api/student/course-access', '/lms/client/course/access/'], async (re
 
 // ----------------------------------------------------
 // TNSKILL PROXY: POST /api/student/progress-info
-// Forwards to: https://sandbox-api.tnskill.tn.gov.in/skilldevelopment/api/student/progress
+// Forwards to: https://api.skilldevelopment.tn.gov.in/skilldevelopment/api/student/progress
 // Also checks local MongoDB progress first
 // ----------------------------------------------------
 app.post(['/api/student/progress-info', '/lms/client/student/progress/'], async (req, res) => {
@@ -1022,6 +1085,8 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
       videos: savedVideos,
       ppts: savedPpts,
       folderPath: courseDir,
+      course_content: body.course_content || [],
+      course_objective: body.course_objective || [],
       midQuiz: body.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
       finalQuiz: body.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] }
     };
@@ -1041,26 +1106,65 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
       memoryCourses.push(courseData);
     }
 
+    // Asynchronously forward course publish to Naan Mudhalvan API
+    (async () => {
+      try {
+        // Strip base64 image data – the external NM API WAF blocks it
+        const safeImageUrl = (course_image_url || body.image || ' ');
+        const externalImageUrl = (typeof safeImageUrl === 'string' && safeImageUrl.startsWith('data:')) ? ' ' : safeImageUrl;
+        const payload = {
+          course_unique_code,
+          course_name: course_name || body.title,
+          course_description: course_description || body.content || ' ',
+          course_image_url: externalImageUrl,
+          instructor: instructor || ' ',
+          duration: String(duration || '1050'),
+          number_of_videos: String(number_of_videos || (body.videos ? body.videos.length : '12')),
+          language: language || 'english',
+          main_stream: main_stream || 'engineering',
+          sub_stream: sub_stream || 'cse',
+          category: category || body.category || ' ',
+          course_outcomes: body.course_outcomes || ' ',
+          system_requirements: system_requirements || ' ',
+          has_subtitles: String(has_subtitles ?? true),
+          reference_id: reference_id || `REF-${Date.now()}`,
+          course_type: course_type || 'ONLINE',
+          location: location || ' ',
+          course_content: body.course_content || [],
+          course_objective: body.course_objective || [],
+          videos: savedVideos || body.videos || [],
+          ppts: savedPpts || body.ppts || [],
+          midQuiz: body.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
+          finalQuiz: body.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] }
+        };
+
+        await Promise.all(TNSKILL_BASES.map(async (base) => {
+          const externalToken = await getExternalToken(base) || req.headers['authorization'] || '';
+          const bearerToken = externalToken.startsWith('Bearer ') ? externalToken : `Bearer ${externalToken}`;
+          return fetch(`${base.trim()}/api/v1/lms/client/course/publish/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': bearerToken
+            },
+            body: JSON.stringify(payload)
+          }).catch((e) => console.error("External publish error:", e));
+        }));
+      } catch (err) {
+        console.error("External publish error:", err);
+      }
+    })();
+
     if (mongoose.connection.readyState === 1) {
-      const updated = await Course.findOneAndUpdate(
+      await Course.findOneAndUpdate(
         { course_unique_code },
         courseData,
         { upsert: true, new: true }
       );
-      return res.status(200).json({
-        status: true,
-        message: `Course published successfully. Folder created at: backend/courses/${safeFolderCode}`,
-        folder_path: courseDir,
-        course: updated
-      });
-    } else {
-      return res.status(200).json({
-        status: true,
-        message: `Course published successfully. Folder created at: backend/courses/${safeFolderCode}`,
-        folder_path: courseDir,
-        course: courseData
-      });
     }
+    return res.status(200).json({
+      message: 'Course has been sent for approval , you will get email as confirmation'
+    });
   } catch (err) {
     console.error('Course Publish Error:', err);
     return res.status(500).json({ status: false, message: 'Server error publishing course.' });
@@ -1114,6 +1218,8 @@ app.get([
           course_description: c.course_description,
           videos: c.videos || [],
           ppts: c.ppts || [],
+          course_content: c.course_content || [],
+          course_objective: c.course_objective || [],
           midQuiz: c.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
           finalQuiz: c.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] },
           studentsEnrolled: enrolledCount,
@@ -1160,6 +1266,8 @@ app.get([
           course_description: c.course_description,
           videos: c.videos || [],
           ppts: c.ppts || [],
+          course_content: c.course_content || [],
+          course_objective: c.course_objective || [],
           midQuiz: c.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
           finalQuiz: c.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] },
           studentsEnrolled: enrolledCount,
@@ -1358,15 +1466,18 @@ app.post(USER_TRACKING_PATHS, authenticateTokenHeader, async (req, res) => {
         if (existing.course_complete !== undefined && existing.course_complete !== "") payload.course_complete = String(existing.course_complete);
         if (existing.total_score !== undefined && existing.total_score !== "") payload.total_score = String(existing.total_score);
 
-        const nmToken = req.headers['authorization'] || 'Bearer mock_nm_token_2026';
-        await fetch('https://sandbox-api.skilldevelopment.tn.gov.in/api/v1/lms/client/course/xf/user-tracking', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': nmToken.startsWith('Bearer ') ? nmToken : `Bearer ${nmToken}`
-          },
-          body: JSON.stringify(payload)
-        }).catch(() => {});
+        await Promise.all(TNSKILL_BASES.map(async (base) => {
+          const externalToken = await getExternalToken(base) || req.headers['authorization'] || 'Bearer mock_nm_token_2026';
+          const bearerToken = externalToken.startsWith('Bearer ') ? externalToken : `Bearer ${externalToken}`;
+          return fetch(`${base.trim()}/api/v1/lms/client/course/xf/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': bearerToken
+            },
+            body: JSON.stringify(payload)
+          }).catch(() => {});
+        }));
       } catch {
         // Log & ignore sandbox fetch network timeout gracefully
       }
@@ -1443,7 +1554,7 @@ app.get(['/api/courses/:courseCode/ppt/:filename', '/courses/:courseCode/ppts/:f
 // NAAN MUDHALVAN (TN SKILL) KNOWLEDGE PARTNER APIs
 // ----------------------------------------------------
 
-app.post(['/nm/api/course/subscribe/', '/course/subscribe/', '/tnskill/api/course/subscribe/'], authenticateTokenHeader, async (req, res) => {
+app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/nm/api/course/subscribe/', '/course/subscribe/', '/tnskill/api/course/subscribe/'], authenticateTokenHeader, async (req, res) => {
   try {
     const { user_id, course_id } = req.body || {};
     
@@ -1605,21 +1716,12 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-// Start Server — with graceful EADDRINUSE recovery
+// Start Server
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Dedicated Backend Server listening on http://localhost:${PORT}`);
 });
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    const fallback = Number(PORT) + 1;
-    console.warn(`⚠️  Port ${PORT} already in use. Retrying on port ${fallback}...`);
-    server.close();
-    app.listen(fallback, '0.0.0.0', () => {
-      console.log(`🚀 Dedicated Backend Server listening on http://localhost:${fallback}`);
-    });
-  } else {
-    console.error('❌ Server error:', err.message);
-    process.exit(1);
-  }
+server.on('error', (error) => {
+  console.error('❌ Server failed to start:', error);
+  process.exit(1);
 });
