@@ -168,7 +168,7 @@ export default function AdminPortal() {
           ppts: c.ppts || [],
           midQuiz: c.midQuiz,
           finalQuiz: c.finalQuiz,
-          is_active: c.course_status ?? true,
+          is_active: c.is_active ?? c.course_status ?? true,
           studentsEnrolled: c.studentsEnrolled || 0,
           rating: c.rating || 4.8
         }));
@@ -355,8 +355,11 @@ export default function AdminPortal() {
   /* ---- DELETE ---- */
   const confirmDelete = async () => {
     try {
-      const res = await fetch(`${API}/users/${encodeURIComponent(deleteModal.email)}`, {
+      const identifier = deleteModal._id || deleteModal.user_unique_id || deleteModal.email;
+      const token = JSON.parse(localStorage.getItem('user'))?.token || '';
+      const res = await fetch(`${API}/users/${encodeURIComponent(identifier)}`, {
         method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       if (data.success) {
@@ -1467,7 +1470,7 @@ export default function AdminPortal() {
                       PPTCount: c.ppts && c.ppts.length ? `${c.ppts.length} PPT Decks` : '12 Decks',
                       MidQuiz: 'Mid Examination (25 Marks)',
                       FinalQuiz: 'Final Assessment (25 Marks)',
-                      EnrolledStudents: Math.max(c.studentsEnrolled || 0, students.length, 1),
+                      EnrolledStudents: Math.max(c.studentsEnrolled || 0, students.filter(s => s.assignedCourses && (s.assignedCourses.includes(c.title) || s.assignedCourses.includes(c.course_unique_code))).length),
                       ApprovalStatus: c.is_active ? 'Active & Published' : 'Draft'
                     })),
                     'my_courses_export.csv'
@@ -1489,8 +1492,8 @@ export default function AdminPortal() {
               <div className="courses-grid">
                 {courses.map(course => {
                   const trackedCount = course.studentsEnrolled || 0;
-                  const assignedCount = students.filter(s => !s.assignedCourses || s.assignedCourses.length === 0 || s.assignedCourses.includes(course.title) || s.assignedCourses.includes(course.course_unique_code)).length;
-                  const enrolledCount = Math.max(trackedCount, assignedCount, students.length, 1);
+                  const assignedCount = students.filter(s => s.assignedCourses && (s.assignedCourses.includes(course.title) || s.assignedCourses.includes(course.course_unique_code))).length;
+                  const enrolledCount = Math.max(trackedCount, assignedCount);
 
                   return (
                     <div key={course._id || course.id} className="course-card">
