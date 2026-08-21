@@ -12,7 +12,7 @@
   "category": "CAD/CAM",
   "system_requirements": "Basic computer literacy",
   "has_subtitles": "true",
-  "reference_id": "REF-1785932329169",
+  "reference_id": "2026/08/19/002",
   "course_type": "ONLINE",
   "location": "",
   "is_active": false,
@@ -352,7 +352,6 @@
       }
     ]
   },
-  
   "finalQuiz": {
     "title": "Final Assessment Quiz (After Video 12) - 25 Marks",
     "totalMarks": 25,

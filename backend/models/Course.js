@@ -21,6 +21,8 @@ const courseSchema = new mongoose.Schema({
   approval_status: { type: Boolean, default: true },
   videos: [{ type: String }],
   ppts: [{ type: String }],
+  course_content: [{ content: String }],
+  course_objective: [{ objective: String }],
   midQuiz: {
     title: { type: String, default: 'Mid-Course Quiz (After Video 6)' },
     questions: [{

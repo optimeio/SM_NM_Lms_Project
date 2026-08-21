@@ -5,7 +5,7 @@ import {
   Trophy, MessageSquare, Calendar, User, Settings, LogOut, Search, Bell, ChevronDown,
   Megaphone, ShieldCheck, Play, BookOpenCheck, Medal, Menu, X, Code2, Cpu, Wifi,
   Settings2, BarChart3, Sparkles, Mail, Phone, Landmark, Camera, CheckCircle2,
-  Save, Contact
+  Save, Contact, AlertCircle
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import tnskillLogo from '../assets/tnskill_logo.png';
@@ -199,6 +199,55 @@ Date: ${new Date().toLocaleDateString()}
   };
 
   useEffect(() => {
+    // ── SSO entry from Naan Mudhalvan portal ─────────────────────────────
+    // URL format: /dashboard?sso=true&uid=<user_unique_id>&cid=<course_id>
+    const urlParams = new URLSearchParams(window.location.search);
+    const isSso  = urlParams.get('sso') === 'true';
+    const ssoUid = urlParams.get('uid');
+    const ssoCid = urlParams.get('cid');
+
+    if (isSso && ssoUid) {
+      // Build a lightweight student session from NM SSO params
+      const ssoUser = {
+        _id: ssoUid,
+        user_unique_id: ssoUid,
+        fullName: 'NM Student',
+        email: `${ssoUid}@nm.student.local`,
+        role: 'student',
+        assignedCourses: ssoCid ? [ssoCid] : [],
+        course_unique_code: ssoCid || ''
+      };
+      // Merge with any existing localStorage user data for the same uid
+      const existingRaw = localStorage.getItem('user');
+      if (existingRaw) {
+        try {
+          const existing = JSON.parse(existingRaw);
+          if (existing.user_unique_id === ssoUid || existing._id === ssoUid) {
+            Object.assign(ssoUser, existing, ssoUser); // SSO fields win
+          }
+        } catch { /* ignore */ }
+      }
+      localStorage.setItem('user', JSON.stringify(ssoUser));
+      // Store a provisional bearer token so progress calls work
+      if (!localStorage.getItem('token')) {
+        // Fetch a fresh token using client credentials
+        fetch('/api/v1/lms/client/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'client_key=59e8bb42f89d5ee93ff466be97022427&client_secret=f7a761767124aef8b904c49b52a555d6'
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d && (d.access_key || d.access)) localStorage.setItem('token', d.access_key || d.access); })
+          .catch(() => {});
+      }
+      // Clean sso params from URL without page reload
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      setUser(ssoUser);
+      setProfileForm(ssoUser);
+      return; // profile fetch & course load will be triggered by setUser
+    }
+    // ── Normal login flow ─────────────────────────────────────────────────
     const storedUser = localStorage.getItem('user');
     if (!storedUser) {
       navigate('/');
@@ -470,18 +519,46 @@ Date: ${new Date().toLocaleDateString()}
           return c;
         });
 
-        // Determine current user data
-        let latestUser = user;
+        // Determine current user data — SSO/current state takes priority over stale registeredUsers
+        let latestUser = { ...user };
         const storedUsersRaw = localStorage.getItem('registeredUsers');
         if (storedUsersRaw) {
           try {
             const registeredUsers = JSON.parse(storedUsersRaw);
-            const match = registeredUsers.find(u => 
+            const match = registeredUsers.find(u =>
               (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
               (u._id && user._id && String(u._id) === String(user._id))
             );
-            if (match) latestUser = { ...user, ...match };
+            if (match) {
+              // Merge but preserve current user's assignedCourses & course_unique_code if they exist
+              const mergedCourses = [
+                ...(user.assignedCourses || []),
+                ...(match.assignedCourses || [])
+              ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+              latestUser = { ...match, ...user, assignedCourses: mergedCourses };
+            }
           } catch {}
+        }
+
+        // Also try to fetch fresh user data from server to get latest assignedCourses
+        if (latestUser.email) {
+          try {
+            const userRes = await fetch(`/api/users/profile?email=${encodeURIComponent(latestUser.email.toLowerCase())}`);
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              if (userData.success && userData.user) {
+                const serverUser = userData.user;
+                const mergedCourses = [
+                  ...(latestUser.assignedCourses || []),
+                  ...(serverUser.assignedCourses || [])
+                ].filter((v, i, a) => a.indexOf(v) === i);
+                latestUser = { ...latestUser, ...serverUser, assignedCourses: mergedCourses };
+                // Update stored user with latest server data
+                localStorage.setItem('user', JSON.stringify(latestUser));
+                setUser(latestUser);
+              }
+            }
+          } catch { /* ignore */ }
         }
 
         // Filter courses: ONLY show courses that are PUBLISHED AND ASSIGNED to this student
@@ -489,19 +566,7 @@ Date: ${new Date().toLocaleDateString()}
         setAllCoursesData(visibleCourses);
       } catch {
         if (localMapped.length > 0) {
-          let latestUser = user;
-          const storedUsersRaw = localStorage.getItem('registeredUsers');
-          if (storedUsersRaw) {
-            try {
-              const registeredUsers = JSON.parse(storedUsersRaw);
-              const match = registeredUsers.find(u => 
-                (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
-                (u._id && user._id && String(u._id) === String(user._id))
-              );
-              if (match) latestUser = { ...user, ...match };
-            } catch {}
-          }
-          const visibleCourses = localMapped.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, latestUser));
+          const visibleCourses = localMapped.filter(c => isCoursePublished(c) && isCourseAssignedToUser(c, user));
           setAllCoursesData(visibleCourses);
         }
       }
@@ -1497,12 +1562,9 @@ Date: ${new Date().toLocaleDateString()}
               </div>
               <div className="certificates-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
                 {(() => {
-                  const issuedList = allCoursesData.filter(c => 
-                    c.certificate_issued === 'true' || c.finalQuizPassed || c.progress === 100 || (c.course_unique_code === 'NTEDU0001' && c.midQuizPassed)
+                  const certCourses = allCoursesData.filter(c => 
+                    c.certificate_issued === 'true' || c.certificate_issued === true || c.finalQuizPassed || c.progress === 100 || (c.course_unique_code === 'NTEDU0001' && c.midQuizPassed)
                   );
-                  
-                  // Always include NTEDU0001 if passed or if activeCourse has completed quizzes
-                  const certCourses = issuedList.length > 0 ? issuedList : allCoursesData.filter(c => c.course_unique_code === 'NTEDU0001' || c.title?.includes('IOT') || c.name?.includes('IOT'));
                   
                   if (certCourses.length === 0) {
                     return (
@@ -1720,6 +1782,13 @@ Date: ${new Date().toLocaleDateString()}
 
               {/* ── RIGHT COLUMN: Personal Information Form ── */}
               <div className="profile-card-details">
+                <div style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '16px', borderRadius: '12px', border: '1px solid #fde68a', marginBottom: '20px', fontSize: '14px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <AlertCircle size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Important Notice for Certificate Generation:</strong>
+                    Please complete your profile details correctly. Your <strong>Full Name</strong>, <strong>College Name</strong>, and <strong>Department</strong> must be accurate and without errors, as they will be printed exactly as they appear here on your final course completion certificate.
+                  </div>
+                </div>
                 <div className="profile-card-details-header">
                   <h3>Personal Information</h3>
                   {!isEditingProfile && (

@@ -1,0 +1,127 @@
+{
+	"info": {
+		"_postman_id": "90e0c8b3-769d-4e94-912f-682ea5553e1f",
+		"name": "Skill Development TN Integration",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Fetch Client Token",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"client_key\": \"59e8bb42f89d5ee93ff466be97022427\",\n  \"client_secret\": \"f7a761767124aef8b904c49b52a555d6\"\n}"
+				},
+				"url": {
+					"raw": "https://api.naanmudhalvan.tn.gov.in/api/v1/lms/client/token/",
+					"protocol": "https",
+					"host": [
+						"api",
+						"naanmudhalvan",
+						"tn",
+						"gov",
+						"in"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lms",
+						"client",
+						"token",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Publish Course",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{YOUR_JWT_TOKEN}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"course_unique_code\": \"TSMG2026IOT\",\n  \"course_name\": \"Embedded Systems & IOT\",\n  \"course_description\": \"IoT Architecture & Embedded Systems is a comprehensive course that teaches you how smart devices connect, communicate, and compute in the real world. From microcontrollers to cloud platforms, you will learn the complete stack.\",\n  \"course_image_url\": \"https://smtnskill.thesmgroups.com/courses/TSMG2026IOT/course_image.png\",\n  \"instructor\": \"RAJA\",\n  \"duration\": \"1050\",\n  \"number_of_videos\": \"12\",\n  \"language\": \"english\",\n  \"main_stream\": \"engineering\",\n  \"sub_stream\": \"cse\",\n  \"category\": \"Embedded Systems\",\n  \"system_requirements\": \"Basic computer literacy and fundamental understanding of programming concepts.\",\n  \"has_subtitles\": \"true\",\n  \"reference_id\": \"2022/06/23/001\",\n  \"course_type\": \"ONLINE\",\n  \"location\": \"salem\"\n}"
+				},
+				"url": {
+					"raw": "https://api.naanmudhalvan.tn.gov.in/api/v1/lms/client/course/publish/",
+					"protocol": "https",
+					"host": [
+						"api",
+						"naanmudhalvan",
+						"tn",
+						"gov",
+						"in"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lms",
+						"client",
+						"course",
+						"publish",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Update Progress (XF)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{YOUR_JWT_TOKEN}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"unique_user_id\": \"USER12345\",\n  \"course_unique_code\": \"TSMG2026IOT\",\n  \"current_video\": \"/courses/TSMG2026IOT/videos/video_1.mp4\",\n  \"video_progress\": \"100\",\n  \"is_completed\": true\n}"
+				},
+				"url": {
+					"raw": "https://api.naanmudhalvan.tn.gov.in/api/v1/lms/client/course/xf/",
+					"protocol": "https",
+					"host": [
+						"api",
+						"naanmudhalvan",
+						"tn",
+						"gov",
+						"in"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lms",
+						"client",
+						"course",
+						"xf",
+						""
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

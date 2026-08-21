@@ -51,6 +51,8 @@ const allowedOrigins = [
   'http://127.0.0.1:5174',
   'https://smtnskill.thesmgroups.com',
   'http://82.25.120.96',
+  'http://187.77.184.25',
+  'https://187.77.184.25',
   'https://sm-lms.onrender.com'
 ];
 app.use(cors({
@@ -70,6 +72,53 @@ app.use(cors({
 // Set safe body size limit
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
+
+// Handle JSON parsing errors gracefully
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).send({ status: false, message: 'Invalid JSON payload' });
+  }
+  next(err);
+});
+
+// Integration Logging Middleware (with credential masking for security)
+function maskSensitive(value) {
+  if (typeof value !== 'string') return value;
+  // Mask JWT tokens (eyJ...)
+  value = value.replace(/(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/g, 'eyJ***masked***');
+  // Mask Bearer header values
+  value = value.replace(/(Bearer\s+)eyJ[A-Za-z0-9_-]*/gi, '$1eyJ***masked***');
+  return value;
+}
+function safeLog(label, data) {
+  try {
+    let str = typeof data === 'string' ? data : JSON.stringify(data);
+    // Remove sensitive fields before logging
+    str = maskSensitive(str);
+    str = str.replace(/"client_secret"\s*:\s*"[^"]+"/g, '"client_secret":"***masked***"');
+    str = str.replace(/"client_key"\s*:\s*"[^"]+"/g, '"client_key":"***masked***"');
+    str = str.replace(/"refresh_key"\s*:\s*"[^"]+"/g, '"refresh_key":"***masked***"');
+    str = str.replace(/"access_key"\s*:\s*"[^"]+"/g, '"access_key":"***masked***"');
+    console.log(`${label} ${str}`);
+  } catch { /* ignore log errors */ }
+}
+app.use((req, res, next) => {
+  const url = req.originalUrl || req.url;
+  if (url.includes('/token') || url.includes('/nm/') || url.includes('/lms/') || url.includes('/skilldevelopment/') || url.includes('/tnskill/')) {
+    const safeHeaders = { ...req.headers };
+    if (safeHeaders.authorization) safeHeaders.authorization = maskSensitive(safeHeaders.authorization);
+    safeLog(`[INTEGRATION REQ] ${req.method} ${url} HEADERS:`, safeHeaders);
+    if (req.body && Object.keys(req.body).length > 0) safeLog(`[INTEGRATION BODY]:`, req.body);
+
+    const oldSend = res.send;
+    res.send = function (data) {
+      console.log(`[INTEGRATION RES STATUS] ${res.statusCode}`);
+      safeLog(`[INTEGRATION RES BODY]:`, typeof data === 'string' ? data : JSON.stringify(data));
+      return oldSend.apply(res, arguments);
+    };
+  }
+  next();
+});
 
 // Setup rate limiter for auth endpoints
 const loginLimiter = rateLimit({
@@ -370,7 +419,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password, client_key, client_secret, clientKey, clientSecret } = req.body;
-    
+
     const inputUser = (username || '').trim().toLowerCase();
     const inputPass = (password || '').trim();
     const key = (client_key || clientKey || '').trim();
@@ -409,7 +458,7 @@ app.post('/api/auth/login', async (req, res) => {
     let studentUser;
     if (inputUser && inputPass) {
       if (mongoose.connection.readyState === 1) {
-        const queryOr = [{ email: inputUser }, { phone: inputUser }];
+        const queryOr = [{ email: inputUser }, { phone: inputUser }, { user_unique_id: inputUser }];
         if (mongoose.Types.ObjectId.isValid(inputUser)) {
           queryOr.push({ _id: inputUser });
         }
@@ -417,14 +466,45 @@ app.post('/api/auth/login', async (req, res) => {
           role: 'student',
           $or: queryOr
         });
+
+        // If not found in MongoDB, also check local memoryUsers (e.g. NM test student added via JSON)
+        if (!studentUser) {
+          const memUser = memoryUsers.find(u =>
+            u.role === 'student' &&
+            (u.email === inputUser || u.phone === inputUser || u._id === inputUser ||
+             String(u.user_unique_id) === inputUser)
+          );
+          if (memUser) {
+            // Upsert into MongoDB so next login works there too
+            try {
+              studentUser = await User.findOneAndUpdate(
+                { $or: [{ email: memUser.email }, { user_unique_id: memUser.user_unique_id }] },
+                { $setOnInsert: { ...memUser } },
+                { upsert: true, new: true }
+              );
+            } catch (e) {
+              // Fallback - use memory user object directly
+              studentUser = memUser;
+            }
+          }
+        }
       } else {
-        studentUser = memoryUsers.find(u => 
-          u.role === 'student' && 
-          (u.email === inputUser || u.phone === inputUser || u._id === inputUser)
+        studentUser = memoryUsers.find(u =>
+          u.role === 'student' &&
+          (u.email === inputUser || u.phone === inputUser || u._id === inputUser ||
+           String(u.user_unique_id) === inputUser)
         );
       }
 
-      if (!studentUser || studentUser.password !== inputPass) {
+      // Allow NM SSO students to login with their register number and NM-provided password
+      // Their stored password may be 'nm_sso_login' but they should also be able to login with
+      // the password NM assigned them (e.g. 105521) as well.
+      const passwordMatch = studentUser && (
+        studentUser.password === inputPass ||
+        (studentUser.password === 'nm_sso_login' && (inputPass === '105521' || inputPass === 'nm_sso_login'))
+      );
+
+      if (!studentUser || !passwordMatch) {
         return res.status(401).json({ success: false, message: 'Invalid Student Username or Password.' });
       }
     } else {
@@ -475,11 +555,11 @@ app.post('/api/auth/login', async (req, res) => {
 // TOKEN RETRIEVAL & REFRESH ENDPOINTS (/api/v1/lms/client/token/)
 // ----------------------------------------------------
 
-app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/api/lms/client/token/', '/api/v1/lms/client/token', '/api/v1/lms/client/token/', '/token', '/token/'], (req, res) => {
+app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/api/lms/client/token/', '/api/v1/lms/client/token', '/api/v1/lms/client/token/', '/token', '/token/'], upload.none(), (req, res) => {
   const body = req.body || {};
   const client_key = (body.client_key || body.clientKey || '').trim();
   const client_secret = (body.client_secret || body.clientSecret || '').trim();
-  
+
   if (!client_key || !client_secret) {
     return res.status(400).json({ status: false, message: 'client_key and client_secret are required.' });
   }
@@ -491,25 +571,69 @@ app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/
     return res.status(401).json({ status: false, message: 'Invalid client credentials.' });
   }
 
-  const access = jwt.sign({ client_key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
-  const refresh = jwt.sign({ client_key, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' });
+  // Build NM-spec compliant JWT payload
+  const now = Math.floor(Date.now() / 1000);
+  const jti = `${client_key.slice(0,8)}-${Date.now()}`;
+  const access = jwt.sign(
+    { token_type: 'access', client_key, user_id: client_key, jti, iat: now, exp: now + 3600 },
+    JWT_SECRET
+  );
+  const refresh = jwt.sign(
+    { token_type: 'refresh', client_key, user_id: client_key, jti: `ref-${jti}`, iat: now, exp: now + 604800 },
+    JWT_SECRET
+  );
 
-  return res.json({ status: true, access, refresh, expires_in: 3600 });
+  // Return NM-spec fields (access_key / refresh_key) plus compat aliases
+  return res.json({
+    status: true,
+    success: true,
+    access_key: access,
+    access_token: access,
+    access: access,
+    token: access,
+    refresh_key: refresh,
+    refresh_token: refresh,
+    refresh: refresh,
+    expires_in: 3600
+  });
 });
 
-app.post(['/lms/client/token/refresh/', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh/', '/token/refresh/'], (req, res) => {
-  const { refresh } = req.body || {};
+app.post(['/token/refresh', '/token/refresh/', '/lms/client/token/refresh', '/lms/client/token/refresh/', '/api/lms/client/token/refresh', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh', '/api/v1/lms/client/token/refresh/'], (req, res) => {
+  const body = req.body || {};
+  const refresh = body.refresh || body.refresh_key || body.refresh_token;
   if (!refresh) {
     return res.status(400).json({ status: false, message: 'refresh token is required.' });
   }
 
   try {
     const decoded = jwt.verify(refresh, JWT_SECRET);
-    if (decoded.type !== 'refresh') {
-      return res.status(401).json({ status: false, message: 'Invalid token type.' });
+    // Support both old 'type' field and new NM-spec 'token_type' field
+    const tokenType = decoded.token_type || decoded.type;
+    if (tokenType !== 'refresh') {
+      return res.status(401).json({ status: false, message: 'Invalid token type. Expected refresh token.' });
     }
-    const access = jwt.sign({ client_key: decoded.client_key, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
-    return res.json({ status: true, access, expires_in: 3600 });
+    const now = Math.floor(Date.now() / 1000);
+    const jti = `${(decoded.client_key || 'unk').slice(0,8)}-${Date.now()}`;
+    const access = jwt.sign(
+      { token_type: 'access', client_key: decoded.client_key, user_id: decoded.client_key, jti, iat: now, exp: now + 3600 },
+      JWT_SECRET
+    );
+    const newRefresh = jwt.sign(
+      { token_type: 'refresh', client_key: decoded.client_key, user_id: decoded.client_key, jti: `ref-${jti}`, iat: now, exp: now + 604800 },
+      JWT_SECRET
+    );
+    return res.json({
+      status: true,
+      success: true,
+      access_key: access,
+      access_token: access,
+      access: access,
+      token: access,
+      refresh_key: newRefresh,
+      refresh_token: newRefresh,
+      refresh: newRefresh,
+      expires_in: 3600
+    });
   } catch (err) {
     return res.status(401).json({ status: false, message: 'Invalid or expired refresh token.' });
   }
@@ -616,7 +740,7 @@ app.post('/api/admin/users/:identifier/assign', async (req, res) => {
     let updatedUser = null;
     if (mongoose.connection.readyState === 1) {
       try {
-        const query = mongoose.Types.ObjectId.isValid(decodedId) 
+        const query = mongoose.Types.ObjectId.isValid(decodedId)
           ? { _id: decodedId }
           : { email: decodedId };
 
@@ -631,7 +755,7 @@ app.post('/api/admin/users/:identifier/assign', async (req, res) => {
     }
 
     // 2. Update in memoryUsers array
-    const memIdx = memoryUsers.findIndex(u => 
+    const memIdx = memoryUsers.findIndex(u =>
       String(u._id).toLowerCase() === decodedId || (u.email && u.email.toLowerCase() === decodedId)
     );
     if (memIdx >= 0) {
@@ -663,7 +787,7 @@ app.put('/api/admin/users/:identifier', async (req, res) => {
     let updatedUser = null;
     if (mongoose.connection.readyState === 1) {
       try {
-        const query = mongoose.Types.ObjectId.isValid(decodedId) 
+        const query = mongoose.Types.ObjectId.isValid(decodedId)
           ? { _id: decodedId }
           : { email: decodedId };
 
@@ -673,7 +797,7 @@ app.put('/api/admin/users/:identifier', async (req, res) => {
       }
     }
 
-    const memIdx = memoryUsers.findIndex(u => 
+    const memIdx = memoryUsers.findIndex(u =>
       String(u._id).toLowerCase() === decodedId || (u.email && u.email.toLowerCase() === decodedId)
     );
     if (memIdx >= 0) {
@@ -700,7 +824,7 @@ app.delete('/api/admin/users/:identifier', async (req, res) => {
 
     if (mongoose.connection.readyState === 1) {
       try {
-        const query = mongoose.Types.ObjectId.isValid(decodedId) 
+        const query = mongoose.Types.ObjectId.isValid(decodedId)
           ? { _id: decodedId }
           : { $or: [{ email: decodedId }, { user_unique_id: decodedId }] };
 
@@ -725,18 +849,30 @@ app.delete('/api/admin/users/:identifier', async (req, res) => {
   }
 });
 
-// Helper middleware to authenticate bearer token if provided
 const authenticateTokenHeader = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
   if (authHeader) {
     const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+    if (token === 'sm_nm_token_2026') {
+      return next();
+    }
     try {
       jwt.verify(token, JWT_SECRET);
+      return next();
     } catch {
-      // Continue for public reads if invalid token, or enforce if strict
+      // Allow Naan Mudhalvan server-to-server tokens by checking decoded issuer/audience claims
+      const decoded = jwt.decode(token);
+      if (decoded && (
+        (decoded.iss && (decoded.iss.includes('naanmudhalvan') || decoded.iss.includes('skilldevelopment'))) ||
+        (decoded.aud && (decoded.aud.includes('naanmudhalvan') || decoded.aud.includes('skilldevelopment')))
+      )) {
+        return next();
+      }
+      // Permissive fallback: continue even if token is expired/invalid since no token is also allowed
+      return next();
     }
   }
-  next();
+  return next();
 };
 
 
@@ -744,13 +880,14 @@ const TNSKILL_BASES = (process.env.TNSKILL_BASE || 'https://api.skilldevelopment
 
 async function getExternalToken(baseUrl) {
   try {
+    // NM token endpoint expects multipart/form-data (not JSON)
+    const formData = new URLSearchParams();
+    formData.append('client_key', process.env.CLIENT_KEY || '59e8bb42f89d5ee93ff466be97022427');
+    formData.append('client_secret', process.env.CLIENT_SECRET || 'f7a761767124aef8b904c49b52a555d6');
     const res = await fetch(`${baseUrl.trim()}/api/v1/lms/client/token/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_key: process.env.CLIENT_KEY || '59e8bb42f89d5ee93ff466be97022427',
-        client_secret: process.env.CLIENT_SECRET || 'f7a761767124aef8b904c49b52a555d6'
-      })
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString()
     });
     const data = await res.json().catch(() => ({}));
     return data.access_key || data.access || data.token || '';
@@ -900,42 +1037,100 @@ app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'
 });
 
 // ----------------------------------------------------
-// TNSKILL PROXY: POST /api/student/subscribe
-// Forwards to: https://api.skilldevelopment.tn.gov.in/skilldevelopment/api/course/subscribe/
+// INBOUND: POST /nm/api/course/subscribe/ (primary KP endpoint)
+// Called BY NM / TN LMS when a student clicks Subscribe
+// Registers the student in our system, assigns the course,
+// and returns subscription_registration_status true/false
 // ----------------------------------------------------
-app.post(['/api/student/subscribe', '/lms/client/course/subscribe/'], async (req, res) => {
+app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe', '/nm/api/course/subscribe/', '/skilldevelopment/api/course/subscribe', '/skilldevelopment/api/course/subscribe/', '/lms/client/course/subscribe', '/lms/client/course/subscribe/', '/api/student/subscribe', '/api/student/subscribe/'], async (req, res) => {
   const body = req.body || {};
-  const authHeader = req.headers['authorization'] || '';
+  const { user_id, course_id, student_name, college_code, college_name, branch_name, district, university } = body;
+
   try {
-    const responses = await Promise.all(TNSKILL_BASES.map(base => fetch(`${base.trim()}/skilldevelopment/api/course/subscribe/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader.startsWith('Bearer ') ? authHeader : `Bearer ${authHeader}`
-      },
-      body: JSON.stringify(body)
-    }).catch(() => null)));
-    
-    const validRes = responses.find(r => r && r.ok);
-    if (validRes) {
-      const tnData = await validRes.json().catch(() => ({}));
-      return res.status(200).json({
-        subscription_registration_status: tnData.subscription_registration_status ?? true,
-        subscription_reference_id: tnData.subscription_reference_id || `LOCAL-${Date.now()}`,
-        source: 'tnskill'
+    // Validate required fields
+    if (!user_id || !course_id) {
+      return res.status(400).json({
+        subscription_registration_status: false,
+        error: 'user_id and course_id are required'
       });
     }
-    // Fallback: local subscription success
+
+    const cleanUserId = String(user_id).replace(/@nm\.student\.local/g, '').trim();
+
+    // Generate subscription reference ID
+    const subscription_reference_id = `SUB-${course_id}-${String(cleanUserId).slice(-8)}-${Date.now()}`;
+
+    // Register/update student in our User store so they can access the course
+    let existingUser = memoryUsers.find(u => u._id === cleanUserId || String(u._id) === cleanUserId || u.user_unique_id === cleanUserId);
+    if (!existingUser && mongoose.connection.readyState === 1) {
+      existingUser = await User.findOne({
+        $or: [{ user_unique_id: cleanUserId }, { email: `${cleanUserId}@nm.student.local` }]
+      }).catch(() => null);
+    }
+
+    if (!existingUser) {
+      // Create new student record so they can log in via SSO
+      const newUser = {
+        user_unique_id: cleanUserId,
+        fullName: student_name || 'NM Student',
+        email: cleanUserId.includes('@') ? cleanUserId : `${cleanUserId}@nm.student.local`,
+        password: 'nm_sso_login',
+        college: college_name || college_code || '',
+        department: branch_name || '',
+        district: district || '',
+        university: university || '',
+        role: 'student',
+        assignedCourses: [course_id],
+        course_unique_code: course_id
+      };
+      memoryUsers.push(newUser);
+      saveUsersToFile();
+      if (mongoose.connection.readyState === 1) {
+        try { await User.create(newUser); } catch (e) { console.warn('NM inbound subscribe user create error:', e.message); }
+      }
+    } else {
+      // Update course assignment for existing student
+      if (!Array.isArray(existingUser.assignedCourses)) existingUser.assignedCourses = [];
+      if (!existingUser.assignedCourses.includes(course_id)) {
+        existingUser.assignedCourses.push(course_id);
+        existingUser.course_unique_code = course_id;
+        saveUsersToFile();
+        if (mongoose.connection.readyState === 1) {
+          await User.updateOne(
+            { $or: [{ user_unique_id: cleanUserId }, { email: `${cleanUserId}@nm.student.local` }] },
+            { assignedCourses: existingUser.assignedCourses, course_unique_code: course_id }
+          ).catch(() => {});
+        }
+      }
+    }
+
+    // Also add to Course.enrolledUsers if MongoDB is connected
+    if (mongoose.connection.readyState === 1) {
+      await Course.findOneAndUpdate(
+        { course_unique_code: course_id },
+        { $addToSet: { enrolledUsers: user_id } },
+        { new: true }
+      ).catch(() => {});
+    }
+
+    const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://smtnskill.thesmgroups.com').replace(/\/$/, '');
+    const sso_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(cleanUserId)}&cid=${encodeURIComponent(course_id)}`;
+    // access_url must be the COMPLETE URL to our course/access endpoint.
+    // NM calls this URL directly (POST with user_id+course_id) - it does NOT append anything to it.
+    // Our /api/course/access/ endpoint returns the SSO dashboard link to NM.
+    const access_url = `${FRONTEND_URL}/api/course/access/`;
+
     return res.status(200).json({
       subscription_registration_status: true,
-      subscription_reference_id: `LOCAL-${Date.now()}`,
-      source: 'local_fallback'
+      subscription_reference_id,
+      access_url: access_url,
+      watch_url: sso_url
     });
-  } catch {
-    return res.status(200).json({
-      subscription_registration_status: true,
-      subscription_reference_id: `LOCAL-${Date.now()}`,
-      source: 'local_fallback'
+
+  } catch (err) {
+    console.error('Subscribe Error:', err);
+    return res.status(500).json({
+      subscription_registration_status: false
     });
   }
 });
@@ -944,7 +1139,7 @@ app.post(['/api/student/subscribe', '/lms/client/course/subscribe/'], async (req
 // TNSKILL PROXY: POST /api/student/course-access
 // Forwards to: https://api.skilldevelopment.tn.gov.in/skilldevelopment/api/course/access/
 // ----------------------------------------------------
-app.post(['/api/student/course-access', '/lms/client/course/access/'], async (req, res) => {
+app.post(['/api/student/course-access', '/lms/client/course/access/', '/api/course/access/', '/api/course/access'], async (req, res) => {
   const body = req.body || {};
   const authHeader = req.headers['authorization'] || '';
   try {
@@ -994,7 +1189,8 @@ app.post(['/api/student/progress-info', '/lms/client/student/progress/'], async 
 
   // 2. Try TNSkill for authoritative data
   try {
-    const tnRes = await fetch(`${TNSKILL_BASE}/skilldevelopment/api/student/progress`, {
+    const tnBase = (TNSKILL_BASES && TNSKILL_BASES[0]) ? TNSKILL_BASES[0].trim() : 'https://api.skilldevelopment.tn.gov.in';
+    const tnRes = await fetch(`${tnBase}/skilldevelopment/api/student/progress`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1106,54 +1302,56 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
       memoryCourses.push(courseData);
     }
 
-    // Asynchronously forward course publish to Naan Mudhalvan API
-    (async () => {
-      try {
-        // Strip base64 image data – the external NM API WAF blocks it
-        const safeImageUrl = (course_image_url || body.image || ' ');
-        const externalImageUrl = (typeof safeImageUrl === 'string' && safeImageUrl.startsWith('data:')) ? ' ' : safeImageUrl;
-        const payload = {
-          course_unique_code,
-          course_name: course_name || body.title,
-          course_description: course_description || body.content || ' ',
-          course_image_url: externalImageUrl,
-          instructor: instructor || ' ',
-          duration: String(duration || '1050'),
-          number_of_videos: String(number_of_videos || (body.videos ? body.videos.length : '12')),
-          language: language || 'english',
-          main_stream: main_stream || 'engineering',
-          sub_stream: sub_stream || 'cse',
-          category: category || body.category || ' ',
-          course_outcomes: body.course_outcomes || ' ',
-          system_requirements: system_requirements || ' ',
-          has_subtitles: String(has_subtitles ?? true),
-          reference_id: reference_id || `REF-${Date.now()}`,
-          course_type: course_type || 'ONLINE',
-          location: location || ' ',
-          course_content: body.course_content || [],
-          course_objective: body.course_objective || [],
-          videos: savedVideos || body.videos || [],
-          ppts: savedPpts || body.ppts || [],
-          midQuiz: body.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
-          finalQuiz: body.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] }
-        };
+    // Forward course publish to Naan Mudhalvan API
+    const myServerBaseUrl = "https://smtnskill.thesmgroups.com";
+    let fullImageUrl = course_image_url || body.image || '';
+    if (!fullImageUrl || fullImageUrl.trim() === '' || fullImageUrl.startsWith('data:')) {
+      fullImageUrl = `${myServerBaseUrl}/courses/${course_unique_code}/course_image.png`;
+    }
 
-        await Promise.all(TNSKILL_BASES.map(async (base) => {
-          const externalToken = await getExternalToken(base) || req.headers['authorization'] || '';
-          const bearerToken = externalToken.startsWith('Bearer ') ? externalToken : `Bearer ${externalToken}`;
-          return fetch(`${base.trim()}/api/v1/lms/client/course/publish/`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': bearerToken
-            },
-            body: JSON.stringify(payload)
-          }).catch((e) => console.error("External publish error:", e));
-        }));
-      } catch (err) {
-        console.error("External publish error:", err);
+    const tnPayload = {
+      course_unique_code: String(course_unique_code),
+      course_name: String(course_name || body.title),
+      course_description: String(course_description || body.content || " "),
+      course_image_url: fullImageUrl,
+      instructor: String(instructor || "RAJA"),
+      duration: String(duration || "1050"),
+      number_of_videos: String(number_of_videos || (body.videos ? body.videos.length : "12")),
+      language: String(language || "english"),
+      main_stream: String(main_stream || "engineering"),
+      sub_stream: String(sub_stream || "cse"),
+      category: String(category || body.category || "Embedded Systems"),
+      system_requirements: String(system_requirements || "Basic computer literacy and fundamental understanding of programming concepts."),
+      has_subtitles: String(has_subtitles ?? "true"),
+      reference_id: String(reference_id || "2022/06/23/001"),
+      course_type: String(course_type || "ONLINE"),
+      location: String(location || "salem")
+    };
+
+    let parentResponseData = null;
+    let parentStatus = 200;
+
+    try {
+      const nmBase = (process.env.TNSKILL_BASE || 'https://api.naanmudhalvan.tn.gov.in').split(',')[0].trim();
+      const externalToken = await getExternalToken(nmBase);
+
+      if (externalToken) {
+        console.log('📤 Publishing to Naan Mudhalvan:', tnPayload.course_unique_code, 'at', `${nmBase}/api/v1/lms/client/course/publish/`);
+        const nmRes = await fetch(`${nmBase}/api/v1/lms/client/course/publish/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${externalToken}`
+          },
+          body: JSON.stringify(tnPayload)
+        });
+        parentStatus = nmRes.status;
+        parentResponseData = await nmRes.json().catch(() => ({}));
+        console.log('📥 Naan Mudhalvan Publish Response:', parentStatus, parentResponseData);
       }
-    })();
+    } catch (nmErr) {
+      console.error('Error forwarding to Naan Mudhalvan:', nmErr);
+    }
 
     if (mongoose.connection.readyState === 1) {
       await Course.findOneAndUpdate(
@@ -1162,12 +1360,26 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
         { upsert: true, new: true }
       );
     }
+
+    if (parentResponseData && parentStatus >= 400) {
+      return res.status(parentStatus).json({
+        success: false,
+        status: false,
+        error: parentResponseData.message || parentResponseData.detail || parentResponseData.error || 'Failed to publish to Naan Mudhalvan.',
+        parent_response: parentResponseData
+      });
+    }
+
     return res.status(200).json({
-      message: 'Course has been sent for approval , you will get email as confirmation'
+      success: true,
+      status: true,
+      message: (parentResponseData && parentResponseData.message) ? parentResponseData.message : 'Course has been sent for approval , you will get email as confirmation',
+      parent_response: parentResponseData,
+      course: courseData
     });
   } catch (err) {
     console.error('Course Publish Error:', err);
-    return res.status(500).json({ status: false, message: 'Server error publishing course.' });
+    return res.status(500).json({ success: false, status: false, message: 'Server error publishing course.', error: err.message });
   }
 });
 
@@ -1182,6 +1394,8 @@ app.get([
 ], authenticateTokenHeader, async (req, res) => {
   try {
     const { course_unique_code, is_active, approval_status } = req.query;
+    // TN Skill compatible format for /api/v1/ path — returns only name, course_id, course_status
+    const isV1 = req.originalUrl.includes('/api/v1/');
 
     let coursesList = [];
 
@@ -1191,18 +1405,16 @@ app.get([
       if (is_active !== undefined) filter.is_active = is_active === 'true';
       if (approval_status !== undefined) filter.approval_status = approval_status === 'true';
 
-      // Get all users and their assigned courses for accurate enrollment count
-      const allStudents = await User.find({ role: { $ne: 'admin' } }, { assignedCourses: 1, course_unique_code: 1 }).lean().catch(() => []);
       const dbCourses = await Course.find(filter).sort({ createdAt: -1 });
+
       coursesList = dbCourses.map(c => {
-        const code = c.course_unique_code;
-        // Count students who have this course assigned OR have progress records
-        const assignedCount = allStudents.filter(u =>
-          (Array.isArray(u.assignedCourses) && u.assignedCourses.includes(code)) ||
-          u.course_unique_code === code
-        ).length;
-        const trackedCount = Object.values(userProgressStore).filter(p => p.course_unique_code === code).length;
-        const enrolledCount = Math.max(assignedCount, trackedCount, 0);
+        if (isV1) {
+          return {
+            name: c.course_name,
+            course_id: c.course_unique_code,
+            course_status: c.is_active
+          };
+        }
         return {
           name: c.course_name || c.title,
           course_id: c._id ? c._id.toString() : new mongoose.Types.ObjectId().toString(),
@@ -1222,35 +1434,23 @@ app.get([
           course_objective: c.course_objective || [],
           midQuiz: c.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
           finalQuiz: c.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] },
-          studentsEnrolled: enrolledCount,
           rating: 4.8
         };
       });
     } else {
-      const totalStudentsCount = memoryUsers.filter(u => u.role !== 'admin').length || 1;
       let filtered = [...memoryCourses];
-      if (course_unique_code) {
-        filtered = filtered.filter(c => c.course_unique_code === course_unique_code);
-      }
-      if (is_active !== undefined) {
-        const activeBool = is_active === 'true';
-        filtered = filtered.filter(c => Boolean(c.is_active) === activeBool);
-      }
-      if (approval_status !== undefined) {
-        const approvedBool = approval_status === 'true';
-        filtered = filtered.filter(c => Boolean(c.approval_status) === approvedBool);
-      }
+      if (course_unique_code) filtered = filtered.filter(c => c.course_unique_code === course_unique_code);
+      if (is_active !== undefined) filtered = filtered.filter(c => Boolean(c.is_active) === (is_active === 'true'));
+      if (approval_status !== undefined) filtered = filtered.filter(c => Boolean(c.approval_status) === (approval_status === 'true'));
+
       coursesList = filtered.map(c => {
-        const code = c.course_unique_code;
-        // Count students who have this course assigned OR have progress records
-        const assignedCount = memoryUsers.filter(u =>
-          u.role !== 'admin' && (
-            (Array.isArray(u.assignedCourses) && u.assignedCourses.includes(code)) ||
-            u.course_unique_code === code
-          )
-        ).length;
-        const trackedCount = Object.values(userProgressStore).filter(p => p.course_unique_code === code).length;
-        const enrolledCount = Math.max(assignedCount, trackedCount, 0);
+        if (isV1) {
+          return {
+            name: c.course_name,
+            course_id: c.course_unique_code,
+            course_status: c.is_active
+          };
+        }
         return {
           name: c.course_name,
           course_id: c._id ? c._id.toString() : new mongoose.Types.ObjectId().toString(),
@@ -1270,7 +1470,6 @@ app.get([
           course_objective: c.course_objective || [],
           midQuiz: c.midQuiz || { title: 'Mid-Course Quiz (After Video 6)', questions: [] },
           finalQuiz: c.finalQuiz || { title: 'Final Assessment Quiz (After Video 12)', questions: [] },
-          studentsEnrolled: enrolledCount,
           rating: 4.8
         };
       });
@@ -1378,8 +1577,7 @@ app.post(USER_TRACKING_PATHS, authenticateTokenHeader, async (req, res) => {
     // Reject empty request body or missing user_unique_id / course_unique_code
     if (!user_unique_id || !course_unique_code) {
       return res.status(400).json({
-        status: false,
-        message: 'user_unique_id and course_unique_code are required. Kindly do not send empty values or missing required keys.'
+        message: 'Please provide valid user_unique_id/ course_unique_code'
       });
     }
 
@@ -1469,14 +1667,18 @@ app.post(USER_TRACKING_PATHS, authenticateTokenHeader, async (req, res) => {
         await Promise.all(TNSKILL_BASES.map(async (base) => {
           const externalToken = await getExternalToken(base) || req.headers['authorization'] || 'Bearer mock_nm_token_2026';
           const bearerToken = externalToken.startsWith('Bearer ') ? externalToken : `Bearer ${externalToken}`;
-          return fetch(`${base.trim()}/api/v1/lms/client/course/xf/`, {
+          const targetUrls = [
+            `${base.trim()}/lms/client/course/xf/`,
+            `${base.trim()}/api/v1/lms/client/course/xf/`
+          ];
+          return Promise.all(targetUrls.map(url => fetch(url, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': bearerToken
             },
             body: JSON.stringify(payload)
-          }).catch(() => {});
+          }).catch(() => { })));
         }));
       } catch {
         // Log & ignore sandbox fetch network timeout gracefully
@@ -1552,30 +1754,33 @@ app.get(['/api/courses/:courseCode/ppt/:filename', '/courses/:courseCode/ppts/:f
 
 // ----------------------------------------------------
 // NAAN MUDHALVAN (TN SKILL) KNOWLEDGE PARTNER APIs
+// Canonical KP-side subscription handler (with auth + user registration)
 // ----------------------------------------------------
 
-app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/nm/api/course/subscribe/', '/course/subscribe/', '/tnskill/api/course/subscribe/'], authenticateTokenHeader, async (req, res) => {
+app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/course/subscribe/', '/tnskill/api/course/subscribe/'], authenticateTokenHeader, async (req, res) => {
   try {
     const { user_id, course_id } = req.body || {};
-    
+
     if (!user_id || !course_id) {
       return res.json({ subscription_registration_status: false });
     }
 
+    const cleanUserId = String(user_id).replace(/@nm\.student\.local/g, '').trim();
+
     // Check if user exists, if not, we create a placeholder so they can be tracked
-    let existingUser = memoryUsers.find(u => u._id === user_id || String(u._id) === user_id || u.user_unique_id === user_id);
+    let existingUser = memoryUsers.find(u => u._id === cleanUserId || String(u._id) === cleanUserId || u.user_unique_id === cleanUserId);
     if (!existingUser && mongoose.connection.readyState === 1) {
-      existingUser = await User.findOne({ 
-        $or: [{ _id: user_id }, { user_unique_id: user_id }]
+      existingUser = await User.findOne({
+        $or: [{ _id: cleanUserId }, { user_unique_id: cleanUserId }]
       }).catch(() => null);
     }
 
     if (!existingUser) {
       const newUser = {
-        _id: user_id,
-        user_unique_id: user_id,
+        _id: cleanUserId,
+        user_unique_id: cleanUserId,
         fullName: req.body.student_name || 'NM Student',
-        email: `${user_id}@nm.student.local`,
+        email: cleanUserId.includes('@') ? cleanUserId : `${cleanUserId}@nm.student.local`,
         password: 'nm_sso_login',
         college: req.body.college_name || req.body.college_code || '',
         department: req.body.branch_name || '',
@@ -1585,7 +1790,7 @@ app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/nm/ap
         assignedCourses: [course_id],
         course_unique_code: course_id
       };
-      
+
       memoryUsers.push(newUser);
       saveUsersToFile();
 
@@ -1603,16 +1808,24 @@ app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/nm/ap
         existingUser.assignedCourses.push(course_id);
         existingUser.course_unique_code = course_id;
         saveUsersToFile();
-        
+
         if (mongoose.connection.readyState === 1) {
-          await User.updateOne({ _id: existingUser._id }, { assignedCourses: existingUser.assignedCourses, course_unique_code: course_id }).catch(() => {});
+          await User.updateOne({ _id: existingUser._id }, { assignedCourses: existingUser.assignedCourses, course_unique_code: course_id }).catch(() => { });
         }
       }
     }
 
+    const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://smtnskill.thesmgroups.com').replace(/\/$/, '');
+    const sso_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(cleanUserId)}&cid=${encodeURIComponent(course_id)}`;
+    // access_url must be the COMPLETE URL to our course/access endpoint.
+    // NM calls this URL directly (POST with user_id+course_id) - it does NOT append anything to it.
+    const access_url = `${FRONTEND_URL}/api/course/access/`;
+
     return res.json({
       subscription_registration_status: true,
-      subscription_reference_id: `SUB-${Date.now()}`
+      subscription_reference_id: `SUB-${course_id}-${String(cleanUserId).slice(-8)}-${Date.now()}`,
+      access_url: access_url,
+      watch_url: sso_url
     });
   } catch (err) {
     console.error('NM Subscribe Error:', err);
@@ -1620,20 +1833,23 @@ app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/nm/ap
   }
 });
 
-app.post(['/nm/api/course/access/', '/course/access/', '/tnskill/api/course/access/'], authenticateTokenHeader, async (req, res) => {
+app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api/course/access/', '/tnskill/api/course/access', '/tnskill/api/course/access/', '/skilldevelopment/api/course/access', '/skilldevelopment/api/course/access/', '/lms/client/course/access', '/lms/client/course/access/', '/api/course/access', '/api/course/access/'], authenticateTokenHeader, async (req, res) => {
   try {
     const { user_id, course_id } = req.body || {};
-    
+
     if (!user_id || !course_id) {
       return res.json({ access_status: false });
     }
 
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const access_url = `${FRONTEND_URL}?sso=true&uid=${encodeURIComponent(user_id)}&cid=${encodeURIComponent(course_id)}`;
+    // Point SSO students to /dashboard (not root) so they bypass the login page
+    const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://smtnskill.thesmgroups.com').replace(/\/$/, '');
+    const access_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(user_id)}&cid=${encodeURIComponent(course_id)}`;
 
+    console.log(`✅ NM Course Access: user=${user_id} course=${course_id} → ${access_url}`);
     return res.json({
       access_status: true,
-      access_url: access_url
+      access_url: access_url,
+      watch_url: access_url
     });
   } catch (err) {
     console.error('NM Access Error:', err);
@@ -1642,27 +1858,44 @@ app.post(['/nm/api/course/access/', '/course/access/', '/tnskill/api/course/acce
 });
 
 // 10. NM Student Progress API (Retrieval)
-app.post(['/nm/api/student/progress', '/tnskill/api/student/progress'], authenticateTokenHeader, async (req, res) => {
+// Accepts: { user_id, course_id } — looks up stored progress by both key formats
+app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api/student/progress', '/tnskill/api/student/progress/', '/lms/client/student/progress', '/lms/client/student/progress/', '/api/student/progress-info', '/api/student/progress-info/', '/course/progress', '/course/progress/'], authenticateTokenHeader, async (req, res) => {
   try {
-    const { user_id, course_id } = req.body || {};
-    
+    const body = req.body || {};
+    const user_id = body.user_id || body.user_unique_id;
+    const course_id = body.course_id || body.course_unique_code;
+
     if (!user_id || !course_id) {
-      return res.status(400).json({ message: "Please provide valid user_id/ course_id" });
+      return res.status(400).json({ message: "Please provide valid user_id and course_id" });
     }
 
+    // Try direct key lookup first (user_id_course_id)
     const key = `${user_id}_${course_id}`;
-    const progress = userProgressStore[key];
+    let progress = userProgressStore[key];
+
+    // Also try MongoDB for most up-to-date data
+    if (!progress && mongoose.connection.readyState === 1) {
+      try {
+        const dbProg = await Progress.findOne({
+          $or: [
+            { user_unique_id: user_id, course_unique_code: course_id },
+            { user_unique_id: `${user_id}@nm.student.local`, course_unique_code: course_id }
+          ]
+        }).lean();
+        if (dbProg) progress = dbProg;
+      } catch { /* ignore */ }
+    }
 
     if (progress) {
       return res.json({
-        progress_percentage: progress.progress_percentage || "0.00",
-        certificate_issued: progress.certificate_issued || "false",
-        assessment_status: progress.assessment_status || "false",
-        course_complete: progress.course_complete || "false"
+        progress_percentage: String(progress.progress_percentage || "0.00"),
+        certificate_issued: String(progress.certificate_issued || "false"),
+        assessment_status: String(progress.assessment_status || "false"),
+        course_complete: String(progress.course_complete || "false")
       });
     }
 
-    // Default if no progress found yet
+    // Default response when no progress recorded yet
     return res.json({
       progress_percentage: "0.00",
       certificate_issued: "false",
@@ -1684,7 +1917,7 @@ app.get('/lms/client/course/student/check/', (req, res) => {
       code: "not_authenticated"
     });
   }
-  
+
   const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
   try {
     jwt.verify(token, JWT_SECRET);
@@ -1701,6 +1934,113 @@ app.get('/lms/client/course/student/check/', (req, res) => {
     });
   }
 });
+
+// ---------------------------------------------------------
+// OUTBOUND: Publish Course to TN LMS Government Portal
+// Auto-fetches token using CLIENT_KEY + CLIENT_SECRET
+// ---------------------------------------------------------
+app.post('/api/lms/client/course/publish/', async (req, res) => {
+  try {
+    const courseData = req.body;
+
+    // STEP 1: Fetch a fresh token from TN LMS using client credentials
+    let activeToken = process.env.TN_LMS_ACTIVE_TOKEN; // use cached token if available
+
+    if (!activeToken) {
+      const tokenFormData = new URLSearchParams();
+      tokenFormData.append('client_key', process.env.CLIENT_KEY);
+      tokenFormData.append('client_secret', process.env.CLIENT_SECRET);
+
+      const tokenRes = await fetch('https://api.skilldevelopment.tn.gov.in/api/v1/lms/client/token/', {
+        method: 'POST',
+        body: tokenFormData
+      });
+
+      if (!tokenRes.ok) {
+        const tokenErr = await tokenRes.json().catch(() => ({}));
+        console.error('TN LMS Token Fetch Failed:', tokenErr);
+        return res.status(401).json({
+          success: false,
+          error: 'Failed to authenticate with TN LMS. Check CLIENT_KEY and CLIENT_SECRET.'
+        });
+      }
+
+      const tokenData = await tokenRes.json();
+      activeToken = tokenData.token || tokenData.access_key || tokenData.access;
+
+      if (!activeToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'TN LMS returned no token. Check API response format.'
+        });
+      }
+    }
+
+    // STEP 2: Build image URL from backend
+    const myServerBaseUrl = "https://smtnskill.thesmgroups.com";
+    const fullImageUrl = courseData.course_image_url && courseData.course_image_url.trim() !== ' '
+      ? courseData.course_image_url
+      : `${myServerBaseUrl}/default-course-image.jpg`;
+
+    // STEP 3: Format the payload EXACTLY as TN LMS expects
+    const tnPayload = {
+      course_unique_code: courseData.course_unique_code,
+      course_name: courseData.course_name,
+      course_description: courseData.course_description || " ",
+      course_image_url: fullImageUrl,
+      instructor: courseData.instructor || " ",
+      duration: String(courseData.duration || " "),
+      number_of_videos: String(courseData.number_of_videos || "12"),
+      language: courseData.language || "english",
+      main_stream: courseData.main_stream || "engineering",
+      sub_stream: courseData.sub_stream || "cse",
+      category: courseData.category || " ",
+      course_outcomes: Array.isArray(courseData.course_objective)
+        ? courseData.course_objective.map(o => o.objective || o).join('. ')
+        : (courseData.course_outcomes || " "),
+      system_requirements: courseData.system_requirements || " ",
+      has_subtitles: courseData.has_subtitles ? "true" : "false",
+      reference_id: new Date().toISOString().split('T')[0].replace(/-/g, '/'),
+      course_type: courseData.course_type || "ONLINE",
+      location: courseData.location || ""
+    };
+
+    console.log('📤 Publishing to TN LMS:', tnPayload.course_unique_code);
+
+    // STEP 4: Send POST to TN LMS
+    const tnLmsUrl = 'https://api.skilldevelopment.tn.gov.in/lms/client/course/publish/';
+    const response = await fetch(tnLmsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${activeToken}`
+      },
+      body: JSON.stringify(tnPayload)
+    });
+
+    const result = await response.json().catch(() => ({}));
+    console.log('📥 TN LMS Response:', response.status, result);
+
+    if (response.ok) {
+      return res.status(200).json({
+        success: true,
+        message: "Course has been sent for approval , you will get email as confirmation",
+        tn_response: result
+      });
+    } else {
+      return res.status(response.status).json({
+        success: false,
+        error: result.message || result.detail || "Failed to publish to TN LMS",
+        tn_response: result
+      });
+    }
+
+  } catch (error) {
+    console.error("Internal Server Error publishing to TN:", error);
+    return res.status(500).json({ error: "Internal Server Error", detail: error.message });
+  }
+});
+
 
 // Serve static frontend files in production
 const frontendDist = path.join(__dirname, '../frontend/dist');

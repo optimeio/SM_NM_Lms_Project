@@ -1,0 +1,661 @@
+{
+  "course_unique_code": "TSMG2026SURF002",
+  "course_name": "Surface Modeling",
+  "course_description": "This Surface Modeling course is designed to provide learners with a comprehensive understanding of creating high-quality freeform surfaces using industry-standard CAD techniques. The program focuses exclusively on surface modeling concepts, enabling students to develop accurate, smooth, and aesthetically refined models used in automotive, aerospace, consumer products, and industrial design.",
+  "course_image_url": "https://example.com/cover.jpg",
+  "instructor": "Sankar Ganesh",
+  "duration": "1050",
+  "number_of_videos": "12",
+  "language": "english",
+  "main_stream": "engineering",
+  "sub_stream": "cse",
+  "category": "CAD/CAM",
+  "system_requirements": "Basic computer literacy",
+  "has_subtitles": "true",
+  "reference_id": "2026/08/19/002",
+  "course_type": "ONLINE",
+  "location": "",
+  "is_active": false,
+  "approval_status": false,
+  "videos": [
+    "/courses/TSMG2026SURF002/videos/video_1.mp4",
+    "/courses/TSMG2026SURF002/videos/video_2.mp4",
+    "/courses/TSMG2026SURF002/videos/video_3.mp4",
+    "/courses/TSMG2026SURF002/videos/video_4.mp4",
+    "/courses/TSMG2026SURF002/videos/video_5.mp4",
+    "/courses/TSMG2026SURF002/videos/video_6.mp4",
+    "/courses/TSMG2026SURF002/videos/video_7.mp4",
+    "/courses/TSMG2026SURF002/videos/video_8.mp4",
+    "/courses/TSMG2026SURF002/videos/video_9.mp4",
+    "/courses/TSMG2026SURF002/videos/video_10.mp4",
+    "/courses/TSMG2026SURF002/videos/video_11.mp4",
+    "/courses/TSMG2026SURF002/videos/video_12.mp4"
+  ],
+  "ppts": [
+    "/courses/TSMG2026SURF002/ppts/presentation_1.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_2.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_3.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_4.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_5.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_6.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_7.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_8.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_9.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_10.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_11.pptx",
+    "/courses/TSMG2026SURF002/ppts/presentation_12.pptx"
+  ],
+  "folderPath": "D:\\SM_NM_Lms_Project\\backend\\courses\\TSMG2026SURF002",
+  "midQuiz": {
+    "title": "Mid-Course Quiz (After Video 6) - 25 Marks",
+    "totalMarks": 25,
+    "questions": [
+      {
+        "id": 1,
+        "question": "What is the primary purpose of Surface Modeling?",
+        "options": [
+          "Creating spreadsheets",
+          "Designing complex freeform surfaces",
+          "Writing software code",
+          "Managing databases"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 2,
+        "question": "Which CAD workbench is commonly used for Surface Modeling?",
+        "options": [
+          "Assembly Design",
+          "Drafting",
+          "Generative Shape Design (GSD)",
+          "Sheet Metal Design"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 3,
+        "question": "Surface Modeling is widely used in which industry?",
+        "options": [
+          "Banking",
+          "Automotive and Aerospace",
+          "Retail",
+          "Healthcare Administration"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 4,
+        "question": "What is the main advantage of Surface Modeling?",
+        "options": [
+          "Reduces internet usage",
+          "Creates smooth and complex shapes",
+          "Increases file size",
+          "Improves typing speed"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 5,
+        "question": "The practice model used throughout this course is:",
+        "options": [
+          "Car Model",
+          "Aircraft Wing",
+          "Penguin Model",
+          "Mobile Phone Model"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 6,
+        "question": "What is the purpose of reference geometry?",
+        "options": [
+          "To decorate the model",
+          "To guide the creation of accurate geometry",
+          "To increase rendering speed",
+          "To reduce file size"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 7,
+        "question": "Which of the following is considered reference geometry?",
+        "options": [
+          "Plane",
+          "Point",
+          "Axis System",
+          "All of the above"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 8,
+        "question": "What does OGS stand for?",
+        "options": [
+          "Object Geometry Surface",
+          "Ordered Geometrical Set",
+          "Open Graphic System",
+          "Original Geometry Shape"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 9,
+        "question": "What is an Axis System mainly used for?",
+        "options": [
+          "Applying colors",
+          "Defining orientation and coordinates",
+          "Creating animations",
+          "Saving files"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 10,
+        "question": "Hybrid Design allows users to work with:",
+        "options": [
+          "Text and Images",
+          "Solids and Surfaces together",
+          "Videos and Audio",
+          "Excel Files"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 11,
+        "question": "What is the main purpose of a wireframe?",
+        "options": [
+          "To store documents",
+          "To define the shape using curves and points",
+          "To create reports",
+          "To edit images"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 12,
+        "question": "Which tool is commonly used to create smooth freeform curves?",
+        "options": [
+          "Rectangle",
+          "Circle",
+          "Spline",
+          "Polygon"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 13,
+        "question": "Curve continuity helps improve:",
+        "options": [
+          "Surface quality",
+          "Internet connection",
+          "Computer speed",
+          "Storage capacity"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 14,
+        "question": "Guide curves are mainly used for:",
+        "options": [
+          "Surface generation and control",
+          "File management",
+          "Printing drawings",
+          "Creating tables"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 15,
+        "question": "Which curve provides smooth transitions between shapes?",
+        "options": [
+          "Straight Line",
+          "Spline",
+          "Rectangle",
+          "Ellipse"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 16,
+        "question": "Which command is used to create the boundary of a surface?",
+        "options": [
+          "Boundary",
+          "Offset",
+          "Mirror",
+          "Scale"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 17,
+        "question": "The Projection command is used to:",
+        "options": [
+          "Project geometry onto a surface",
+          "Create folders",
+          "Change colors",
+          "Save files"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 18,
+        "question": "A Parallel Curve is created at a fixed:",
+        "options": [
+          "Distance from the original curve",
+          "Angle only",
+          "Height only",
+          "Width only"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 19,
+        "question": "Which command creates a smooth connection between intersecting curves?",
+        "options": [
+          "Trim",
+          "Corner",
+          "Offset",
+          "Join"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 20,
+        "question": "Boundary curves are commonly used before creating:",
+        "options": [
+          "Surface features",
+          "Reports",
+          "Tables",
+          "Animations"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 21,
+        "question": "Which command creates a surface by extending a profile in one direction?",
+        "options": [
+          "Revolve",
+          "Sweep",
+          "Extrude",
+          "Trim"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 22,
+        "question": "Revolve creates a surface by rotating a profile around a:",
+        "options": [
+          "Point",
+          "Plane",
+          "Axis",
+          "Curve"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 23,
+        "question": "Sweep creates a surface by moving a profile along a:",
+        "options": [
+          "Guide Curve or Spine",
+          "Table",
+          "Folder",
+          "Database"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 24,
+        "question": "The Spine in a Sweep operation controls the:",
+        "options": [
+          "Surface path",
+          "Color of the model",
+          "Material properties",
+          "Layer settings"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 25,
+        "question": "By the end of the first half of the course, students should be able to:",
+        "options": [
+          "Create and edit basic surface models using reference geometry and surface creation tools",
+          "Design mobile applications",
+          "Develop web applications",
+          "Manage cloud databases"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      }
+    ]
+  },
+  "finalQuiz": {
+    "title": "Final Assessment Quiz (After Video 12) - 25 Marks",
+    "totalMarks": 25,
+    "questions": [
+      {
+        "id": 1,
+        "question": "Final Q#1: What is the purpose of a Multi-Section Surface?",
+        "options": [
+          "Create a surface by rotating a profile around an axis",
+          "Generate a smooth surface through multiple profiles",
+          "Remove unwanted portions of a surface",
+          "Join two existing surfaces"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 2,
+        "question": "Final Q#2: How many profiles are required to create a Multi-Section Surface?",
+        "options": [
+          "One profile only",
+          "One profile and one point only",
+          "Two or more profiles",
+          "One profile and one axis only"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 3,
+        "question": "Final Q#3: What is the function of guide curves in surface modeling?",
+        "options": [
+          "Control the shape of the surface",
+          "Trim unwanted surface areas",
+          "Measure surface thickness",
+          "Apply material properties"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 4,
+        "question": "Final Q#4: Why are smooth surface transitions important?",
+        "options": [
+          "Reduce the number of sketches",
+          "Increase model thickness",
+          "Automatically create solid features",
+          "Improve surface quality and continuity"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 5,
+        "question": "Final Q#5: Which feature is commonly used to create complex freeform surfaces?",
+        "options": [
+          "Pocket",
+          "Adaptive Sweep",
+          "Pad",
+          "Shaft"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 6,
+        "question": "Final Q#6: Adaptive Sweep is mainly used for creating:",
+        "options": [
+          "Flat planar surfaces only",
+          "Solid extrusion features",
+          "Complex curved surfaces",
+          "Threaded components"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 7,
+        "question": "Final Q#7: What is the purpose of a constrained sketch?",
+        "options": [
+          "Define the profile accurately",
+          "Increase rendering quality",
+          "Convert surfaces into solids",
+          "Remove surface gaps"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 8,
+        "question": "Final Q#8: Sweep errors are usually caused by:",
+        "options": [
+          "Hidden reference planes",
+          "Missing material",
+          "Low battery",
+          "Incorrect profiles or guide curves"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 9,
+        "question": "Final Q#9: Which command removes unwanted portions of a surface?",
+        "options": [
+          "Sweep",
+          "Trim",
+          "Join",
+          "Loft"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 10,
+        "question": "Final Q#10: Which command divides a surface using another element?",
+        "options": [
+          "Fill",
+          "Join",
+          "Split",
+          "Rotate"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 11,
+        "question": "Final Q#11: What is the purpose of the Extrapolate command?",
+        "options": [
+          "Extend a surface beyond its existing boundary",
+          "Rotate a surface about an axis",
+          "Create a new sketch plane",
+          "Merge two surfaces together"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 12,
+        "question": "Final Q#12: Surface editing is mainly performed to:",
+        "options": [
+          "Change the coordinate system",
+          "Increase drawing scale",
+          "Reduce processor speed",
+          "Improve the quality and accuracy of the model"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 13,
+        "question": "Final Q#13: Which operation is commonly used to refine an existing surface?",
+        "options": [
+          "Pocket",
+          "Trim",
+          "Pad",
+          "Rib"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 14,
+        "question": "Final Q#14: What is the primary purpose of Surface Connections?",
+        "options": [
+          "Generate assembly constraints",
+          "Increase surface thickness",
+          "Smoothly join adjacent surfaces",
+          "Create solid bodies"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 15,
+        "question": "Final Q#15: Which fillet is specifically designed for surface modeling?",
+        "options": [
+          "Shape Fillet",
+          "Chamfer",
+          "Pocket Fillet",
+          "Edge Offset"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 16,
+        "question": "Final Q#16: Edge Fillet is mainly used to:",
+        "options": [
+          "Split large surfaces",
+          "Offset reference planes",
+          "Create guide curves",
+          "Smooth sharp edges between surfaces"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 17,
+        "question": "Final Q#17: Which feature helps create smooth transitions between connected surfaces?",
+        "options": [
+          "Mirror",
+          "Scale",
+          "Shape Fillet",
+          "Translate"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 18,
+        "question": "Final Q#18: What does G0 continuity represent?",
+        "options": [
+          "Position continuity",
+          "Tangency continuity",
+          "Curvature continuity",
+          "Surface thickness continuity"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 19,
+        "question": "Final Q#19: What does G1 continuity represent?",
+        "options": [
+          "Position continuity only",
+          "Tangency continuity between surfaces",
+          "Equal surface thickness",
+          "Material continuity"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 20,
+        "question": "Final Q#20: What is the purpose of continuity analysis?",
+        "options": [
+          "Create new reference planes",
+          "Generate tool paths",
+          "Convert surfaces into solids",
+          "Verify smooth transitions between surfaces"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 21,
+        "question": "Final Q#21: Surface Healing is used to:",
+        "options": [
+          "Increase model weight",
+          "Create assembly constraints",
+          "Repair gaps, overlaps, and defects in surfaces",
+          "Add textures to surfaces"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      },
+      {
+        "id": 22,
+        "question": "Final Q#22: What is the main purpose of final validation?",
+        "options": [
+          "Ensure the model meets quality and design requirements",
+          "Increase rendering speed",
+          "Apply material properties",
+          "Create exploded views"
+        ],
+        "correctAnswer": 0,
+        "marks": 1
+      },
+      {
+        "id": 23,
+        "question": "Final Q#23: Which process is commonly performed before completing a surface model?",
+        "options": [
+          "Drafting Annotation",
+          "Surface Healing",
+          "BOM Generation",
+          "Exploded Assembly Creation"
+        ],
+        "correctAnswer": 1,
+        "marks": 1
+      },
+      {
+        "id": 24,
+        "question": "Final Q#24: Which tool is commonly used to identify defects in a surface model?",
+        "options": [
+          "Material Editor",
+          "Assembly Constraint",
+          "Sheet Metal Flattening",
+          "Surface Analysis"
+        ],
+        "correctAnswer": 3,
+        "marks": 1
+      },
+      {
+        "id": 25,
+        "question": "Final Q#25: What is the expected outcome of a completed surface model?",
+        "options": [
+          "Multiple disconnected surfaces",
+          "Unfinished sketches with reference geometry",
+          "Smooth, accurate, fully connected, and validated geometry",
+          "A model containing surface gaps and overlaps"
+        ],
+        "correctAnswer": 2,
+        "marks": 1
+      }
+    ]
+  }
+}

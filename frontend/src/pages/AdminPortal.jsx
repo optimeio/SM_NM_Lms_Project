@@ -861,33 +861,17 @@ export default function AdminPortal() {
         console.warn('localStorage quota handled safely:', lsErr);
       }
 
-      // Auto-assign course to target scope upon publish (defaults to all students)
-      if (isPublish) {
-        const targetScope = courseModal.autoAssignTo || 'all';
-        if (targetScope !== 'none') {
-          handleBulkAssignCourse(finalSavedCourse, {
-            targetMode: targetScope,
-            targetCollege: courseModal.autoAssignCollege || 'ALL',
-            targetDept: courseModal.autoAssignDept || 'ALL',
-            selectedStudentEmails: courseModal.autoAssignStudents || []
-          });
-        }
-      }
-
-      if (res.ok || data.status || data.success) {
-        showToast(isPublish ? '✅ Course published & assigned successfully!' : '💾 Course saved as draft successfully!');
+      if (res.ok && (data.success || data.status)) {
+        showToast(isPublish ? (data.message || 'Course has been sent for approval , you will get email as confirmation') : '💾 Course saved as draft successfully!');
         fetchCourses();
         setCourseModal(null);
       } else {
-        showToast(isPublish ? 'Saved locally!' : 'Saved draft locally!');
-        fetchCourses();
-        setCourseModal(null);
+        const errorMsg = data.error || data.message || (isPublish ? 'Failed to publish to TN Skill Development portal.' : 'Failed to save course.');
+        showToast(errorMsg, 'error');
       }
     } catch (err) {
       console.error('Save/Publish error handled:', err);
-      showToast(isPublish ? 'Course published successfully!' : 'Course draft saved successfully!');
-      fetchCourses();
-      setCourseModal(null);
+      showToast(isPublish ? 'Network error: Failed to publish course.' : 'Network error: Failed to save course.', 'error');
     }
   };
 
@@ -903,10 +887,11 @@ export default function AdminPortal() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok || data.status || data.success) {
-        showToast('🚀 Course published successfully!');
+        // Use the exact message returned from the backend if available
+        showToast(data.message || '🚀 Course published successfully!');
         fetchCourses();
       } else {
-        showToast('Failed to publish course.', 'error');
+        showToast(data.error || 'Failed to publish course.', 'error');
       }
     } catch (err) {
       console.error(err);

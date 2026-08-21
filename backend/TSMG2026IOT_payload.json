@@ -1,0 +1,18 @@
+{
+  "course_unique_code": "TSMG2026IOT",
+  "course_name": "Embedded Systems & IOT",
+  "course_description": "IoT Architecture & Embedded Systems is a comprehensive course that teaches you how smart devices connect, communicate, and compute in the real world. From microcontrollers to cloud platforms, you will learn the complete stack.",
+  "course_image_url": "https://smtnskill.thesmgroups.com/courses/TSMG2026IOT/course_image.png",
+  "instructor": "RAJA",
+  "duration": "1050",
+  "number_of_videos": "12",
+  "language": "english",
+  "main_stream": "engineering",
+  "sub_stream": "cse",
+  "category": "Embedded Systems",
+  "system_requirements": "Basic computer literacy and fundamental understanding of programming concepts.",
+  "has_subtitles": "true",
+  "reference_id": "2022/06/23/001",
+  "course_type": "ONLINE",
+  "location": "salem"
+}
