@@ -1064,7 +1064,7 @@ app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe',
     let existingUser = memoryUsers.find(u => u._id === cleanUserId || String(u._id) === cleanUserId || u.user_unique_id === cleanUserId);
     if (!existingUser && mongoose.connection.readyState === 1) {
       existingUser = await User.findOne({
-        $or: [{ user_unique_id: cleanUserId }, { email: `${cleanUserId}@nm.student.local` }]
+        $or: [{ user_unique_id: cleanUserId }, { email: cleanUserId.includes('@') ? cleanUserId : `${cleanUserId}@nm.student.local` }]
       }).catch(() => null);
     }
 
@@ -1097,7 +1097,7 @@ app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe',
         saveUsersToFile();
         if (mongoose.connection.readyState === 1) {
           await User.updateOne(
-            { $or: [{ user_unique_id: cleanUserId }, { email: `${cleanUserId}@nm.student.local` }] },
+            { $or: [{ user_unique_id: cleanUserId }, { email: cleanUserId.includes('@') ? cleanUserId : `${cleanUserId}@nm.student.local` }] },
             { assignedCourses: existingUser.assignedCourses, course_unique_code: course_id }
           ).catch(() => {});
         }
@@ -1771,7 +1771,7 @@ app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/cours
     let existingUser = memoryUsers.find(u => u._id === cleanUserId || String(u._id) === cleanUserId || u.user_unique_id === cleanUserId);
     if (!existingUser && mongoose.connection.readyState === 1) {
       existingUser = await User.findOne({
-        $or: [{ _id: cleanUserId }, { user_unique_id: cleanUserId }]
+        $or: [{ _id: cleanUserId }, { user_unique_id: cleanUserId }, { email: cleanUserId.includes('@') ? cleanUserId : `${cleanUserId}@nm.student.local` }]
       }).catch(() => null);
     }
 

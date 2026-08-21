@@ -612,6 +612,41 @@ app.delete('/api/admin/users/:identifier', async (req, res) => {
   }
 });
 
+// ── 10c. User Profile Endpoint (GET & PUT) ────────────────────────────────────
+app.get('/api/users/profile', async (req, res) => {
+  const email = (req.query.email || '').toLowerCase().trim();
+  if (!email) return res.json({ success: false, message: 'Email required' });
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findOne({ $or: [{ email }, { user_unique_id: email.replace(/@nm\.student\.local$/, '') }] }).lean();
+      if (user) return res.json({ success: true, user });
+    }
+    // Fallback to memory
+    const memUser = memoryUsers.find(u => u.email === email || u.user_unique_id === email.replace(/@nm\.student\.local$/, ''));
+    if (memUser) return res.json({ success: true, user: memUser });
+    return res.json({ success: false, message: 'User not found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/users/profile', async (req, res) => {
+  const email = (req.query.email || '').toLowerCase().trim();
+  if (!email) return res.json({ success: false, message: 'Email required' });
+  try {
+    const updates = req.body || {};
+    delete updates._id; // Don't overwrite _id
+    if (mongoose.connection.readyState === 1) {
+      await User.findOneAndUpdate({ email }, { $set: updates }, { upsert: false });
+    }
+    const memIdx = memoryUsers.findIndex(u => u.email === email);
+    if (memIdx >= 0) Object.assign(memoryUsers[memIdx], updates);
+    return res.json({ success: true, message: 'Profile updated' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── 10b. Courses List Endpoint ────────────────────────────────────────────────
 
 app.get(['/lms/client/courses/', '/api/v1/lms/client/courses/', '/api/lms/client/courses/', '/api/courses'], authToken, async (req, res) => {
