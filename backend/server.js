@@ -183,11 +183,25 @@ async function syncManifestsToMongoDB() {
           if (vidFiles.length > 0) courseObj.videos = vidFiles.map(f => `/courses/${folder}/videos/${f}`);
         }
 
-        await Course.findOneAndUpdate(
-          { course_unique_code: courseObj.course_unique_code },
-          courseObj,
-          { upsert: true, new: true }
-        );
+        const existingCourse = await Course.findOne({ course_unique_code: courseObj.course_unique_code });
+        if (!existingCourse) {
+          await Course.create(courseObj);
+        } else {
+          // If it exists, update structural content files from disk, but preserve live MongoDB status edits (active status, approval status, description, ratings, etc.)
+          await Course.updateOne(
+            { course_unique_code: courseObj.course_unique_code },
+            {
+              $set: {
+                videos: courseObj.videos,
+                ppts: courseObj.ppts,
+                midQuiz: courseObj.midQuiz,
+                finalQuiz: courseObj.finalQuiz,
+                course_content: courseObj.course_content,
+                course_objective: courseObj.course_objective
+              }
+            }
+          );
+        }
 
         // Also update memoryCourses so in-memory is consistent
         const idx = memoryCourses.findIndex(c => c.course_unique_code === courseObj.course_unique_code);
