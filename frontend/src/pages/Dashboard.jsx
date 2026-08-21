@@ -953,45 +953,16 @@ Date: ${new Date().toLocaleDateString()}
                       <button 
                         className="btn-ccc-action"
                         style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#38bdf8', border: '1px solid #334155', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                        onClick={async () => {
+                        onClick={() => {
                           const videos = course.videos || [];
                           const maxIdx = Math.max(0, videos.length - 1);
                           const startIdx = Math.min(course.completedVideos || 0, maxIdx);
                           
-                          // 1. TNSkill Integration: Subscribe to Course if not yet subscribed
+                          // 1. TNSkill Integration: Subscribe to Course if not yet subscribed (Background non-blocking)
                           const token = localStorage.getItem('token') || '';
                           const subKey = `sub_${course.course_unique_code || course.id}`;
                           if (!localStorage.getItem(subKey)) {
-                            try {
-                              const subRes = await fetch('/api/student/subscribe', {
-                                method: 'POST',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'Authorization': `Bearer ${token}`
-                                },
-                                body: JSON.stringify({
-                                  user_id: user.email || user.user_unique_id || 'student_123',
-                                  course_id: course.course_unique_code || course.id,
-                                  student_name: user.fullName || 'Student',
-                                  college_code: user.college_code || '1792',
-                                  college_name: user.college || 'abc college',
-                                  branch_name: user.department || 'computer science',
-                                  district: user.district || 'chennai',
-                                  university: user.university || 'anna university'
-                                })
-                              });
-                              const subData = await subRes.json();
-                              if (subData.subscription_reference_id) {
-                                localStorage.setItem(subKey, subData.subscription_reference_id);
-                              }
-                            } catch (err) {
-                              console.error('Subscription error:', err);
-                            }
-                          }
-
-                          // 2. TNSkill Integration: Log Course Access
-                          try {
-                            await fetch('/api/student/course-access', {
+                            fetch('/api/student/subscribe', {
                               method: 'POST',
                               headers: {
                                 'Content-Type': 'application/json',
@@ -1007,11 +978,40 @@ Date: ${new Date().toLocaleDateString()}
                                 district: user.district || 'chennai',
                                 university: user.university || 'anna university'
                               })
+                            })
+                            .then(res => res.json())
+                            .then(subData => {
+                              if (subData && subData.subscription_reference_id) {
+                                localStorage.setItem(subKey, subData.subscription_reference_id);
+                              }
+                            })
+                            .catch(err => {
+                              console.error('Subscription error:', err);
                             });
-                          } catch (err) {
-                            console.error('Access logging error:', err);
                           }
 
+                          // 2. TNSkill Integration: Log Course Access (Background non-blocking)
+                          fetch('/api/student/course-access', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                              user_id: user.email || user.user_unique_id || 'student_123',
+                              course_id: course.course_unique_code || course.id,
+                              student_name: user.fullName || 'Student',
+                              college_code: user.college_code || '1792',
+                              college_name: user.college || 'abc college',
+                              branch_name: user.department || 'computer science',
+                              district: user.district || 'chennai',
+                              university: user.university || 'anna university'
+                            })
+                          }).catch(err => {
+                            console.error('Access logging error:', err);
+                          });
+
+                          // Instantly render the workspace interface (Zero Delay)
                           setActiveCourse(course);
                           setCurrentVideoIndex(startIdx);
                           setActiveQuizModal(null);
@@ -1581,10 +1581,10 @@ Date: ${new Date().toLocaleDateString()}
                       studentName: user.fullName || 'Student Name',
                       college: user.college || 'ANNA UNIVERSITY',
                       department: user.department || 'Electronics & Communication Engineering',
-                      courseName: 'Embedded System & IOT',
+                      courseName: c.title || 'Embedded System & IOT',
                       courseStream: user.department || 'ECE / CSE / EEE',
                       academicYear: user.year || '2025-2026',
-                      venue: 'ANNA UNIVERSITY',
+                      venue: user.college || 'ANNA UNIVERSITY',
                       startDate: '01/06/2026',
                       endDate: '31/07/2026',
                       issuedDate: new Date().toLocaleDateString('en-GB'),

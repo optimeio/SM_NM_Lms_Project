@@ -440,7 +440,7 @@ app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe',
 });
 
 // ── 8. NM Inbound: Course Access URL (called by NM to get watch URL) ──────────
-app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api/course/access/', '/tnskill/api/course/access', '/tnskill/api/course/access/', '/skilldevelopment/api/course/access', '/skilldevelopment/api/course/access/', '/lms/client/course/access', '/lms/client/course/access/', '/api/course/access', '/api/course/access/'], (req, res) => {
+app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api/course/access/', '/tnskill/api/course/access', '/tnskill/api/course/access/', '/skilldevelopment/api/course/access', '/skilldevelopment/api/course/access/', '/lms/client/course/access', '/lms/client/course/access/', '/api/course/access', '/api/course/access/', '/api/student/course-access', '/api/student/course-access/'], (req, res) => {
   const { user_id, course_id } = req.body || {};
   if (!user_id || !course_id) return res.json({ access_status: false });
 
