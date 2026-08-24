@@ -396,7 +396,7 @@ app.get(['/lms/client/course/student/check/', '/lms/client/course/student/check'
 });
 
 // ── 7. NM Inbound: Subscribe (called by NM when student subscribes) ───────────
-app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe', '/nm/api/course/subscribe/', '/skilldevelopment/api/course/subscribe', '/skilldevelopment/api/course/subscribe/', '/lms/client/course/subscribe', '/lms/client/course/subscribe/', '/api/student/subscribe', '/api/student/subscribe/'], async (req, res) => {
+app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe', '/nm/api/course/subscribe/', '/skilldevelopment/api/course/subscribe', '/skilldevelopment/api/course/subscribe/', '/lms/client/course/subscribe', '/lms/client/course/subscribe/', '/api/student/subscribe', '/api/student/subscribe/', '/api/course/subscribe', '/api/course/subscribe/'], async (req, res) => {
   const { user_id, course_id, student_name, college_name, college_code, branch_name, district, university } = req.body || {};
   if (!user_id || !course_id) {
     return res.status(400).json({ subscription_registration_status: false, error: 'user_id and course_id are required' });
@@ -440,7 +440,7 @@ app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe',
 });
 
 // ── 8. NM Inbound: Course Access URL (called by NM to get watch URL) ──────────
-app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api/course/access/', '/tnskill/api/course/access', '/tnskill/api/course/access/', '/skilldevelopment/api/course/access', '/skilldevelopment/api/course/access/', '/lms/client/course/access', '/lms/client/course/access/', '/api/course/access', '/api/course/access/', '/api/student/course-access', '/api/student/course-access/'], (req, res) => {
+app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api/course/access/', '/tnskill/api/course/access', '/tnskill/api/course/access/', '/skilldevelopment/api/course/access', '/skilldevelopment/api/course/access/', '/lms/client/course/access', '/lms/client/course/access/', '/api/course/access', '/api/course/access/'], (req, res) => {
   const { user_id, course_id } = req.body || {};
   if (!user_id || !course_id) return res.json({ access_status: false });
 
@@ -452,7 +452,7 @@ app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api
 });
 
 // ── NM Student Progress API (Retrieval) ──────────────────────────────────────
-app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api/student/progress', '/tnskill/api/student/progress/', '/lms/client/student/progress', '/lms/client/student/progress/', '/api/student/progress-info', '/api/student/progress-info/', '/course/progress', '/course/progress/'], (req, res) => {
+app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api/student/progress', '/tnskill/api/student/progress/', '/lms/client/student/progress', '/lms/client/student/progress/', '/api/student/progress-info', '/api/student/progress-info/', '/course/progress', '/course/progress/', '/api/student/progress', '/api/student/progress/', '/student/progress', '/student/progress/'], (req, res) => {
   const body = req.body || {};
   const user_id = body.user_id || body.user_unique_id;
   const course_id = body.course_id || body.course_unique_code;
@@ -477,39 +477,172 @@ app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api
   });
 });
 
+const TNSKILL_BASES = (process.env.TNSKILL_BASE || 'https://api.skilldevelopment.tn.gov.in,https://api.skilldevelopment.in').split(',');
+
+async function getExternalToken(baseUrl) {
+  try {
+    const formData = new URLSearchParams();
+    formData.append('client_key', process.env.CLIENT_KEY || '59e8bb42f89d5ee93ff466be97022427');
+    formData.append('client_secret', process.env.CLIENT_SECRET || 'f7a761767124aef8b904c49b52a555d6');
+    const res = await fetch(`${baseUrl.trim()}/api/v1/lms/client/token/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString()
+    });
+    const data = await res.json().catch(() => ({}));
+    return data.token || data.access_key || data.access || '';
+  } catch (err) {
+    console.error('Error fetching external token for', baseUrl, ':', err.message);
+    return '';
+  }
+}
+
 // ── 9. Progress Update: user-tracking (called by our KP frontend/backend) ─────
 app.post(['/lms/client/course/xf/user-tracking', '/lms/client/course/xf/', '/api/v1/lms/client/course/xf/'], authToken, (req, res) => {
-  const { user_unique_id, course_unique_code, progress_percentage, certificate_issued, assessment_status, course_complete } = req.body || {};
+  const body = req.body || {};
+  const {
+    user_unique_id,
+    course_unique_code,
+    progress_percentage,
+    completedVideos,
+    midQuizPassed,
+    midQuizScore,
+    finalQuizPassed,
+    finalQuizScore,
+    certificate_issued,
+    certificate_issued_at,
+    assessment_status,
+    course_complete,
+    total_score
+  } = body;
+
   if (!user_unique_id || !course_unique_code) {
     return res.status(400).json({ status: false, message: 'user_unique_id and course_unique_code are required.' });
   }
+
   const key = `${user_unique_id}_${course_unique_code}`;
-  prodProgressStore[key] = {
-    ...(prodProgressStore[key] || {}),
-    user_unique_id, course_unique_code,
-    ...(progress_percentage  !== undefined && { progress_percentage }),
-    ...(certificate_issued   !== undefined && { certificate_issued }),
-    ...(assessment_status    !== undefined && { assessment_status }),
-    ...(course_complete      !== undefined && { course_complete }),
+  const existing = prodProgressStore[key] || {
+    user_unique_id,
+    course_unique_code,
+    progress_percentage: "0.00",
+    completedVideos: 0,
+    midQuizPassed: false,
+    midQuizScore: 0,
+    finalQuizPassed: false,
+    finalQuizScore: 0,
+    certificate_issued: "false",
+    certificate_issued_at: null,
+    assessment_status: "false",
+    course_complete: "false",
+    total_score: "",
     updated_at: new Date().toISOString()
   };
 
+  // Update only provided non-empty fields
+  if (progress_percentage !== undefined && progress_percentage !== "") {
+    existing.progress_percentage = String(progress_percentage);
+  }
+  if (completedVideos !== undefined) {
+    existing.completedVideos = Number(completedVideos);
+  }
+  if (midQuizPassed !== undefined) {
+    existing.midQuizPassed = Boolean(midQuizPassed);
+  }
+  if (midQuizScore !== undefined) {
+    existing.midQuizScore = Number(midQuizScore);
+  }
+  if (finalQuizPassed !== undefined) {
+    existing.finalQuizPassed = Boolean(finalQuizPassed);
+  }
+  if (finalQuizScore !== undefined) {
+    existing.finalQuizScore = Number(finalQuizScore);
+  }
+  if (certificate_issued !== undefined && certificate_issued !== "") {
+    existing.certificate_issued = String(certificate_issued);
+  }
+  if (certificate_issued_at !== undefined) {
+    existing.certificate_issued_at = certificate_issued_at;
+  }
+  if (assessment_status !== undefined && assessment_status !== "") {
+    existing.assessment_status = String(assessment_status);
+  }
+  if (course_complete !== undefined && course_complete !== "") {
+    existing.course_complete = String(course_complete);
+  }
+  if (total_score !== undefined && total_score !== "") {
+    existing.total_score = String(total_score);
+  }
+  existing.updated_at = new Date().toISOString();
+
+  prodProgressStore[key] = existing;
+
   // Persist to MongoDB if connected
   if (mongoose.connection.readyState === 1) {
-    const update = {};
-    if (progress_percentage  !== undefined) update.progress_percentage  = progress_percentage;
-    if (certificate_issued   !== undefined) update.certificate_issued   = certificate_issued;
-    if (assessment_status    !== undefined) update.assessment_status    = assessment_status;
-    if (course_complete      !== undefined) update.course_complete      = course_complete;
     const ProgressModel = mongoose.models.Progress || mongoose.model('Progress', new mongoose.Schema({
-      user_unique_id: String, course_unique_code: String,
-      progress_percentage: String, certificate_issued: String,
-      assessment_status: String, course_complete: String
+      user_unique_id: String,
+      course_unique_code: String,
+      progress_percentage: String,
+      completedVideos: Number,
+      midQuizPassed: Boolean,
+      midQuizScore: Number,
+      finalQuizPassed: Boolean,
+      finalQuizScore: Number,
+      certificate_issued: String,
+      certificate_issued_at: Date,
+      assessment_status: String,
+      course_complete: String,
+      total_score: String
     }, { timestamps: true }));
-    ProgressModel.findOneAndUpdate({ user_unique_id, course_unique_code }, { $set: update }, { upsert: true, new: true }).catch(() => {});
+    ProgressModel.findOneAndUpdate({ user_unique_id, course_unique_code }, { $set: existing }, { upsert: true, new: true }).catch(() => {});
   }
 
-  return res.json({ status: true, message: 'Student course progress updated successfully.', data: prodProgressStore[key] });
+  // Forward to TNSkill Sandbox API
+  (async () => {
+    try {
+      const cleanUid = String(existing.user_unique_id).replace(/@nm\.student\.local/g, '').trim();
+      const payload = {
+        user_unique_id: cleanUid,
+        unique_user_id: cleanUid,
+        course_unique_code: existing.course_unique_code
+      };
+
+      if (existing.progress_percentage !== undefined && existing.progress_percentage !== "") {
+        const rawPct = parseFloat(existing.progress_percentage);
+        payload.progress_percentage = isNaN(rawPct) ? 0 : rawPct;
+      } else {
+        payload.progress_percentage = 0;
+      }
+
+      payload.certificate_issued = existing.certificate_issued === 'true' || existing.certificate_issued === true;
+      payload.assessment_status = existing.assessment_status === 'true' || existing.assessment_status === true;
+      payload.course_complete = existing.course_complete === 'true' || existing.course_complete === true;
+
+      if (existing.total_score !== undefined && existing.total_score !== "") {
+        payload.total_score = String(existing.total_score);
+      }
+
+      await Promise.all(TNSKILL_BASES.map(async (base) => {
+        const externalToken = await getExternalToken(base) || req.headers['authorization'] || 'Bearer mock_nm_token_2026';
+        const bearerToken = externalToken.startsWith('Bearer ') ? externalToken : `Bearer ${externalToken}`;
+        const targetUrls = [
+          `${base.trim()}/lms/client/course/xf/`,
+          `${base.trim()}/api/v1/lms/client/course/xf/`
+        ];
+        return Promise.all(targetUrls.map(url => fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': bearerToken
+          },
+          body: JSON.stringify(payload)
+        }).catch(() => { })));
+      }));
+    } catch {
+      // ignore
+    }
+  })();
+
+  return res.json({ status: true, message: 'Student course progress updated successfully.', data: existing });
 });
 
 // ── 10. NM Student Progress Retrieval ─────────────────────────────────────────

@@ -18,3 +18,8 @@ Thumbs.db
 # Large ZIPs and uploads
 backend.zip
 backend_upload/
+
+# Local persistent data — NEVER upload these to live server
+# These files are auto-generated on the server and contain live data
+backend/data/users.json
+backend/data/progress.json

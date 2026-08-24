@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
+  user_unique_id: { type: String },
   fullName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   phone: { type: String },
@@ -10,6 +11,7 @@ const userSchema = new mongoose.Schema({
   department: { type: String },
   year: { type: String },
   district: { type: String },
+  university: { type: String },
   role: { type: String, enum: ['student', 'admin'], default: 'student' },
   assignedCourses: [{ type: String }],
   course_unique_code: { type: String },

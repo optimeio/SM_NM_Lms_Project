@@ -208,11 +208,13 @@ Date: ${new Date().toLocaleDateString()}
 
     if (isSso && ssoUid) {
       // Build a lightweight student session from NM SSO params
+      // Strip any @nm.student.local suffix from ssoUid so we never build double-suffix emails
+      const cleanSsoUid = ssoUid.replace(/@nm\.student\.local/g, '').trim();
       const ssoUser = {
-        _id: ssoUid,
-        user_unique_id: ssoUid,
+        _id: cleanSsoUid,
+        user_unique_id: cleanSsoUid,
         fullName: 'NM Student',
-        email: `${ssoUid}@nm.student.local`,
+        email: `${cleanSsoUid}@nm.student.local`,
         role: 'student',
         assignedCourses: ssoCid ? [ssoCid] : [],
         course_unique_code: ssoCid || ''
@@ -420,7 +422,7 @@ Date: ${new Date().toLocaleDateString()}
       }));
 
       try {
-        const userId = user?.email || user?.user_unique_id || 'student_123';
+        const userId = user?.user_unique_id || user?._id || user?.email || 'student_123';
         let serverProgressMap = {};
         try {
           const progRes = await fetch(`/api/user/progress?user_unique_id=${encodeURIComponent(userId)}`);
@@ -576,7 +578,7 @@ Date: ${new Date().toLocaleDateString()}
 
   const sendProgressUpdate = async (courseCode, percentage, isComplete = false, extraData = {}) => {
     try {
-      const userId = user?.email || user?.user_unique_id || 'student_123';
+      const userId = user?.user_unique_id || user?._id || user?.email || 'student_123';
       const payload = {
         user_unique_id: userId,
         course_unique_code: courseCode,
@@ -1139,14 +1141,14 @@ Date: ${new Date().toLocaleDateString()}
                                 return;
                               }
                               const nextVid = currentVideoIndex + 1;
-                              if (nextVid === 6 && !activeCourse.midQuizPassed) {
+                              if (nextVid >= 6 && !activeCourse.midQuizPassed) {
                                 setActiveQuizModal('mid');
-                                triggerToast('📝 Reached Video 6! Pass the Mid-Course Quiz to unlock Video 7.');
+                                triggerToast('📝 Pass the Mid-Course Quiz to unlock Video 7 and subsequent lessons.');
                                 return;
                               }
-                              if (nextVid === 12 && !activeCourse.finalQuizPassed) {
+                              if (nextVid >= 12 && !activeCourse.finalQuizPassed) {
                                 setActiveQuizModal('final');
-                                triggerToast('🏆 All 12 Videos done! Complete the Final Quiz for Certification.');
+                                triggerToast('🏆 Complete the Final Quiz to get your Certificate.');
                                 return;
                               }
                               const newComp = Math.max(activeCourse.completedVideos, nextVid);
@@ -1184,8 +1186,17 @@ Date: ${new Date().toLocaleDateString()}
                             disabled={currentVideoIndex >= 11}
                             onClick={() => {
                               const nextVid = currentVideoIndex + 1;
-                              const isLocked = nextVid > activeCourse.completedVideos || (nextVid > 6 && !activeCourse.midQuizPassed);
-                              if (isLocked) { triggerToast(`🔒 Complete Video ${currentVideoIndex + 1} first to unlock Video ${nextVid + 1}`); return; }
+                              const isQuizLocked = nextVid >= 6 && !activeCourse.midQuizPassed;
+                              const isVideoLocked = nextVid > activeCourse.completedVideos;
+                              if (isQuizLocked) {
+                                setActiveQuizModal('mid');
+                                triggerToast('📝 Pass the Mid-Course Quiz first to unlock Video 7.');
+                                return;
+                              }
+                              if (isVideoLocked) {
+                                triggerToast(`🔒 Complete Video ${currentVideoIndex + 1} first to unlock Video ${nextVid + 1}`);
+                                return;
+                              }
                               setCurrentVideoIndex(nextVid);
                               setVideoWatchProgress(nextVid < activeCourse.completedVideos ? 100 : 0);
                               triggerToast(`▶ Playing Video #${nextVid + 1}`);
@@ -1205,7 +1216,7 @@ Date: ${new Date().toLocaleDateString()}
                       </div>
                       <div className="cp-video-list">
                         {Array.from({ length: 12 }).map((_, idx) => {
-                          const isQuizLocked = idx > 6 && !activeCourse.midQuizPassed;
+                          const isQuizLocked = idx >= 6 && !activeCourse.midQuizPassed;
                           const isVideoLocked = idx > activeCourse.completedVideos;
                           const isLocked = isQuizLocked || isVideoLocked;
                           const isCurrent = idx === currentVideoIndex;

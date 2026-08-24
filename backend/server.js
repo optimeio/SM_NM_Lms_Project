@@ -569,7 +569,7 @@ app.post('/api/auth/login', async (req, res) => {
 // TOKEN RETRIEVAL & REFRESH ENDPOINTS (/api/v1/lms/client/token/)
 // ----------------------------------------------------
 
-app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/api/lms/client/token/', '/api/v1/lms/client/token', '/api/v1/lms/client/token/', '/token', '/token/'], upload.none(), (req, res) => {
+app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/api/lms/client/token/', '/api/v1/lms/client/token', '/api/v1/lms/client/token/', '/token', '/token/', '/api/token', '/api/token/'], upload.none(), (req, res) => {
   const body = req.body || {};
   const client_key = (body.client_key || body.clientKey || '').trim();
   const client_secret = (body.client_secret || body.clientSecret || '').trim();
@@ -597,22 +597,14 @@ app.post(['/lms/client/token', '/lms/client/token/', '/api/lms/client/token', '/
     JWT_SECRET
   );
 
-  // Return NM-spec fields (access_key / refresh_key) plus compat aliases
+  // NM spec: return only token + refresh
   return res.json({
-    status: true,
-    success: true,
-    access_key: access,
-    access_token: access,
-    access: access,
     token: access,
-    refresh_key: refresh,
-    refresh_token: refresh,
-    refresh: refresh,
-    expires_in: 3600
+    refresh: refresh
   });
 });
 
-app.post(['/token/refresh', '/token/refresh/', '/lms/client/token/refresh', '/lms/client/token/refresh/', '/api/lms/client/token/refresh', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh', '/api/v1/lms/client/token/refresh/'], (req, res) => {
+app.post(['/token/refresh', '/token/refresh/', '/lms/client/token/refresh', '/lms/client/token/refresh/', '/api/lms/client/token/refresh', '/api/lms/client/token/refresh/', '/api/v1/lms/client/token/refresh', '/api/v1/lms/client/token/refresh/', '/api/token/refresh', '/api/token/refresh/'], (req, res) => {
   const body = req.body || {};
   const refresh = body.refresh || body.refresh_key || body.refresh_token;
   if (!refresh) {
@@ -637,16 +629,8 @@ app.post(['/token/refresh', '/token/refresh/', '/lms/client/token/refresh', '/lm
       JWT_SECRET
     );
     return res.json({
-      status: true,
-      success: true,
-      access_key: access,
-      access_token: access,
-      access: access,
       token: access,
-      refresh_key: newRefresh,
-      refresh_token: newRefresh,
-      refresh: newRefresh,
-      expires_in: 3600
+      refresh: newRefresh
     });
   } catch (err) {
     return res.status(401).json({ status: false, message: 'Invalid or expired refresh token.' });
@@ -660,10 +644,17 @@ app.get('/api/users/profile', async (req, res) => {
     if (!email) {
       return res.status(400).json({ message: 'Email query parameter is required.' });
     }
-    const targetEmail = String(email).trim().toLowerCase();
+    // Sanitize: strip any double @nm.student.local suffix
+    const rawEmail = String(email).trim().toLowerCase();
+    const targetEmail = rawEmail.replace(/(@nm\.student\.local)+/g, '@nm.student.local');
 
     if (mongoose.connection.readyState === 1) {
-      const user = await User.findOne({ email: targetEmail });
+      // Try exact match first, then bare-ID lookup for NM SSO users
+      let user = await User.findOne({ email: targetEmail });
+      if (!user && targetEmail.endsWith('@nm.student.local')) {
+        const bareId = targetEmail.split('@')[0];
+        user = await User.findOne({ user_unique_id: bareId });
+      }
       if (user) {
         return res.json({ success: true, user });
       }
@@ -685,11 +676,28 @@ app.get('/api/users/profile', async (req, res) => {
 app.put('/api/users/profile', async (req, res) => {
   try {
     const { email } = req.query;
-    const updateData = req.body || {};
+    const updateData = { ...(req.body || {}) };
     if (!email) {
       return res.status(400).json({ message: 'Email query parameter is required.' });
     }
-    const targetEmail = String(email).trim().toLowerCase();
+    // Sanitize: strip any double @nm.student.local suffix from query email
+    const rawEmail = String(email).trim().toLowerCase();
+    const targetEmail = rawEmail.replace(/(@nm\.student\.local)+/g, '@nm.student.local');
+
+    // Never allow the email field in the body to corrupt the stored email
+    // Sanitize it if present, or simply remove it (the query param is the source of truth)
+    if (updateData.email !== undefined) {
+      const bodyEmail = String(updateData.email).trim().toLowerCase()
+        .replace(/(@nm\.student\.local)+/g, '@nm.student.local');
+      // Only keep the email update if it's a real email (not a synthetic NM local address)
+      if (bodyEmail !== targetEmail && !bodyEmail.endsWith('@nm.student.local')) {
+        updateData.email = bodyEmail;
+      } else {
+        delete updateData.email; // don't overwrite with same or corrupted value
+      }
+    }
+    // Never update password from this endpoint
+    delete updateData.password;
 
     // 1. Update in MongoDB if connected
     let updatedUser = null;
@@ -904,7 +912,7 @@ async function getExternalToken(baseUrl) {
       body: formData.toString()
     });
     const data = await res.json().catch(() => ({}));
-    return data.access_key || data.access || data.token || '';
+    return data.token || data.access_key || data.access || '';
   } catch (err) {
     console.error('Error fetching external token for', baseUrl, ':', err.message);
     return '';
@@ -976,6 +984,37 @@ function savePhysicalFiles(course_unique_code, videos, ppts) {
   return { savedVideos, savedPpts, courseDir, safeFolderCode };
 }
 
+// Helper to save base64 course image to physical file on disk
+function saveCourseImage(course_unique_code, imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('data:')) {
+    return imageUrl || '';
+  }
+
+  try {
+    const safeFolderCode = course_unique_code.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const courseDir = path.join(__dirname, 'courses', safeFolderCode);
+    if (!fs.existsSync(courseDir)) {
+      fs.mkdirSync(courseDir, { recursive: true });
+    }
+
+    const matches = imageUrl.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
+    if (!matches || matches.length < 3) {
+      return imageUrl;
+    }
+
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const base64Data = matches[2];
+    const fileName = `course_image.${ext}`;
+    const filePath = path.join(courseDir, fileName);
+
+    fs.writeFileSync(filePath, base64Data, { encoding: 'base64' });
+    return `/courses/${safeFolderCode}/${fileName}`;
+  } catch (err) {
+    console.error('Error saving course image:', err);
+    return imageUrl;
+  }
+}
+
 // ----------------------------------------------------
 // SAVE DRAFT ENDPOINT: POST /lms/client/course/save-draft/
 // Saves course with is_active: false (draft, not visible to students)
@@ -996,7 +1035,7 @@ app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'
       course_unique_code,
       course_name: course_name || body.title,
       course_description: body.course_description || body.content || '',
-      course_image_url: body.course_image_url || body.image || '',
+      course_image_url: saveCourseImage(course_unique_code, body.course_image_url || body.image || ''),
       instructor: body.instructor || 'Instructor',
       duration: String(body.duration || '0'),
       number_of_videos: String(body.number_of_videos || (body.videos ? body.videos.length : '12')),
@@ -1056,7 +1095,7 @@ app.post(['/lms/client/course/save-draft/', '/api/lms/client/course/save-draft/'
 // Registers the student in our system, assigns the course,
 // and returns subscription_registration_status true/false
 // ----------------------------------------------------
-app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe', '/nm/api/course/subscribe/', '/skilldevelopment/api/course/subscribe', '/skilldevelopment/api/course/subscribe/', '/lms/client/course/subscribe', '/lms/client/course/subscribe/', '/api/student/subscribe', '/api/student/subscribe/'], async (req, res) => {
+app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe', '/nm/api/course/subscribe/', '/skilldevelopment/api/course/subscribe', '/skilldevelopment/api/course/subscribe/', '/lms/client/course/subscribe', '/lms/client/course/subscribe/', '/api/student/subscribe', '/api/student/subscribe/', '/api/course/subscribe', '/api/course/subscribe/'], async (req, res) => {
   const body = req.body || {};
   const { user_id, course_id, student_name, college_code, college_name, branch_name, district, university } = body;
 
@@ -1064,8 +1103,7 @@ app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe',
     // Validate required fields
     if (!user_id || !course_id) {
       return res.status(400).json({
-        subscription_registration_status: false,
-        error: 'user_id and course_id are required'
+        subscription_registration_status: false
       });
     }
 
@@ -1129,16 +1167,11 @@ app.post(['/course/subscribe', '/course/subscribe/', '/nm/api/course/subscribe',
 
     const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://smtnskill.thesmgroups.com').replace(/\/$/, '');
     const sso_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(cleanUserId)}&cid=${encodeURIComponent(course_id)}`;
-    // access_url must be the COMPLETE URL to our course/access endpoint.
-    // NM calls this URL directly (POST with user_id+course_id) - it does NOT append anything to it.
-    // Our /api/course/access/ endpoint returns the SSO dashboard link to NM.
-    const access_url = `${FRONTEND_URL}/api/course/access/`;
+    console.log(`✅ NM Subscribe: user=${cleanUserId} course=${course_id} sso_url=${sso_url}`);
 
     return res.status(200).json({
       subscription_registration_status: true,
-      subscription_reference_id,
-      access_url: access_url,
-      watch_url: sso_url
+      subscription_reference_id
     });
 
   } catch (err) {
@@ -1272,12 +1305,13 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
 
     // Extract & save physical media files to disk, converting Base64 to web URLs
     const { savedVideos, savedPpts, courseDir, safeFolderCode } = savePhysicalFiles(course_unique_code, body.videos, body.ppts);
+    const savedImageUrl = saveCourseImage(course_unique_code, course_image_url || body.image || '');
 
     const courseData = {
       course_unique_code,
       course_name: course_name || body.title,
       course_description: course_description || body.content || '',
-      course_image_url: course_image_url || body.image || '',
+      course_image_url: savedImageUrl,
       instructor: instructor || 'Instructor',
       duration: String(duration || '0'),
       number_of_videos: String(number_of_videos || (body.videos ? body.videos.length : '12')),
@@ -1318,9 +1352,11 @@ app.post(['/lms/client/course/publish/', '/api/lms/client/course/publish/'], aut
 
     // Forward course publish to Naan Mudhalvan API
     const myServerBaseUrl = "https://smtnskill.thesmgroups.com";
-    let fullImageUrl = course_image_url || body.image || '';
+    let fullImageUrl = savedImageUrl;
     if (!fullImageUrl || fullImageUrl.trim() === '' || fullImageUrl.startsWith('data:')) {
       fullImageUrl = `${myServerBaseUrl}/courses/${course_unique_code}/course_image.png`;
+    } else if (fullImageUrl.startsWith('/')) {
+      fullImageUrl = `${myServerBaseUrl}${fullImageUrl}`;
     }
 
     const tnPayload = {
@@ -1668,15 +1704,27 @@ app.post(USER_TRACKING_PATHS, authenticateTokenHeader, async (req, res) => {
     // Asynchronously forward progress update to Naan Mudhalvan Sandbox API
     (async () => {
       try {
+        const cleanUid = String(existing.user_unique_id).replace(/@nm\.student\.local/g, '').trim();
         const payload = {
-          user_unique_id: existing.user_unique_id,
+          user_unique_id: cleanUid,
+          unique_user_id: cleanUid,
           course_unique_code: existing.course_unique_code
         };
-        if (existing.progress_percentage !== undefined && existing.progress_percentage !== "") payload.progress_percentage = String(existing.progress_percentage);
-        if (existing.certificate_issued !== undefined && existing.certificate_issued !== "") payload.certificate_issued = String(existing.certificate_issued);
-        if (existing.assessment_status !== undefined && existing.assessment_status !== "") payload.assessment_status = String(existing.assessment_status);
-        if (existing.course_complete !== undefined && existing.course_complete !== "") payload.course_complete = String(existing.course_complete);
-        if (existing.total_score !== undefined && existing.total_score !== "") payload.total_score = String(existing.total_score);
+
+        if (existing.progress_percentage !== undefined && existing.progress_percentage !== "") {
+          const rawPct = parseFloat(existing.progress_percentage);
+          payload.progress_percentage = isNaN(rawPct) ? 0 : rawPct;
+        } else {
+          payload.progress_percentage = 0;
+        }
+
+        payload.certificate_issued = existing.certificate_issued === 'true' || existing.certificate_issued === true;
+        payload.assessment_status = existing.assessment_status === 'true' || existing.assessment_status === true;
+        payload.course_complete = existing.course_complete === 'true' || existing.course_complete === true;
+
+        if (existing.total_score !== undefined && existing.total_score !== "") {
+          payload.total_score = String(existing.total_score);
+        }
 
         await Promise.all(TNSKILL_BASES.map(async (base) => {
           const externalToken = await getExternalToken(base) || req.headers['authorization'] || 'Bearer mock_nm_token_2026';
@@ -1721,7 +1769,14 @@ app.get([
 
     if (mongoose.connection.readyState === 1) {
       try {
-        const query = userId ? { user_unique_id: userId } : {};
+        // Build query: also match bare numeric ID when userId is an NM SSO email
+        let query = {};
+        if (userId) {
+          const bareId = userId.includes('@') ? userId.split('@')[0] : null;
+          query = bareId
+            ? { $or: [{ user_unique_id: userId }, { user_unique_id: bareId }] }
+            : { user_unique_id: userId };
+        }
         const dbProgress = await Progress.find(query).lean();
         if (dbProgress && dbProgress.length > 0) {
           dbProgress.forEach(p => {
@@ -1738,7 +1793,12 @@ app.get([
     if (!userId) {
       return res.json({ success: true, user_progress: Object.values(userProgressStore) });
     }
-    const userProgressList = Object.values(userProgressStore).filter(p => p.user_unique_id === userId);
+
+    // Match by full userId OR bare numeric part (SSO email vs raw ID)
+    const bareId = userId.includes('@') ? userId.split('@')[0] : null;
+    const userProgressList = Object.values(userProgressStore).filter(p =>
+      p.user_unique_id === userId || (bareId && p.user_unique_id === bareId)
+    );
     return res.json({ success: true, user_progress: userProgressList });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to fetch user progress.' });
@@ -1831,15 +1891,11 @@ app.post(['/api/tnskill/course/subscribe/', '/api/nm/course/subscribe/', '/cours
 
     const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://smtnskill.thesmgroups.com').replace(/\/$/, '');
     const sso_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(cleanUserId)}&cid=${encodeURIComponent(course_id)}`;
-    // access_url must be the COMPLETE URL to our course/access endpoint.
-    // NM calls this URL directly (POST with user_id+course_id) - it does NOT append anything to it.
-    const access_url = `${FRONTEND_URL}/api/course/access/`;
+    console.log(`✅ NM Subscribe (handler 2): user=${cleanUserId} course=${course_id} sso=${sso_url}`);
 
     return res.json({
       subscription_registration_status: true,
-      subscription_reference_id: `SUB-${course_id}-${String(cleanUserId).slice(-8)}-${Date.now()}`,
-      access_url: access_url,
-      watch_url: sso_url
+      subscription_reference_id: `SUB-${course_id}-${String(cleanUserId).slice(-8)}-${Date.now()}`
     });
   } catch (err) {
     console.error('NM Subscribe Error:', err);
@@ -1855,11 +1911,15 @@ app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api
       return res.json({ access_status: false });
     }
 
+    // Always strip @nm.student.local suffix before embedding in SSO URL
+    // so the frontend never receives a pre-suffixed UID and builds a double suffix
+    const cleanUid = String(user_id).replace(/@nm\.student\.local/g, '').trim();
+
     // Point SSO students to /dashboard (not root) so they bypass the login page
     const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://smtnskill.thesmgroups.com').replace(/\/$/, '');
-    const access_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(user_id)}&cid=${encodeURIComponent(course_id)}`;
+    const access_url = `${FRONTEND_URL}/dashboard?sso=true&uid=${encodeURIComponent(cleanUid)}&cid=${encodeURIComponent(course_id)}`;
 
-    console.log(`✅ NM Course Access: user=${user_id} course=${course_id} → ${access_url}`);
+    console.log(`✅ NM Course Access: user=${user_id} (clean=${cleanUid}) course=${course_id} → ${access_url}`);
     return res.json({
       access_status: true,
       access_url: access_url,
@@ -1873,7 +1933,7 @@ app.post(['/course/access', '/course/access/', '/nm/api/course/access', '/nm/api
 
 // 10. NM Student Progress API (Retrieval)
 // Accepts: { user_id, course_id } — looks up stored progress by both key formats
-app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api/student/progress', '/tnskill/api/student/progress/', '/lms/client/student/progress', '/lms/client/student/progress/', '/api/student/progress-info', '/api/student/progress-info/', '/course/progress', '/course/progress/'], authenticateTokenHeader, async (req, res) => {
+app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api/student/progress', '/tnskill/api/student/progress/', '/lms/client/student/progress', '/lms/client/student/progress/', '/api/student/progress-info', '/api/student/progress-info/', '/course/progress', '/course/progress/', '/api/student/progress', '/api/student/progress/', '/student/progress', '/student/progress/'], authenticateTokenHeader, async (req, res) => {
   try {
     const body = req.body || {};
     const user_id = body.user_id || body.user_unique_id;
@@ -1883,12 +1943,10 @@ app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api
       return res.status(400).json({ message: "Please provide valid user_id and course_id" });
     }
 
-    // Try direct key lookup first (user_id_course_id)
-    const key = `${user_id}_${course_id}`;
-    let progress = userProgressStore[key];
+    let progress = null;
 
-    // Also try MongoDB for most up-to-date data
-    if (!progress && mongoose.connection.readyState === 1) {
+    // 1. Always prefer MongoDB (authoritative source) when connected
+    if (mongoose.connection.readyState === 1) {
       try {
         const dbProg = await Progress.findOne({
           $or: [
@@ -1897,28 +1955,41 @@ app.post(['/nm/api/student/progress', '/nm/api/student/progress/', '/tnskill/api
           ]
         }).lean();
         if (dbProg) progress = dbProg;
-      } catch { /* ignore */ }
+      } catch { /* ignore DB errors, fall back to in-memory */ }
     }
+
+    // 2. Fall back to in-memory store when DB is unavailable or record not found
+    if (!progress) {
+      const key = `${user_id}_${course_id}`;
+      progress = userProgressStore[key] || null;
+    }
+
+    // Helper: normalize progress_percentage to a consistent 2-decimal string
+    const formatPct = (val) => {
+      const n = parseFloat(val);
+      if (isNaN(n)) return '0.00';
+      return n.toFixed(2);
+    };
 
     if (progress) {
       return res.json({
-        progress_percentage: String(progress.progress_percentage || "0.00"),
-        certificate_issued: String(progress.certificate_issued || "false"),
-        assessment_status: String(progress.assessment_status || "false"),
-        course_complete: String(progress.course_complete || "false")
+        progress_percentage: formatPct(progress.progress_percentage),
+        certificate_issued: String(progress.certificate_issued || 'false'),
+        assessment_status: String(progress.assessment_status || 'false'),
+        course_complete: String(progress.course_complete || 'false')
       });
     }
 
-    // Default response when no progress recorded yet
+    // Default response when no progress recorded yet for this user/course
     return res.json({
-      progress_percentage: "0.00",
-      certificate_issued: "false",
-      assessment_status: "false",
-      course_complete: "false"
+      progress_percentage: '0.00',
+      certificate_issued: 'false',
+      assessment_status: 'false',
+      course_complete: 'false'
     });
   } catch (err) {
     console.error('NM Student Progress Error:', err);
-    return res.status(500).json({ message: "Server error retrieving progress" });
+    return res.status(500).json({ message: 'Server error retrieving progress' });
   }
 });
 
@@ -1992,9 +2063,13 @@ app.post('/api/lms/client/course/publish/', async (req, res) => {
 
     // STEP 2: Build image URL from backend
     const myServerBaseUrl = "https://smtnskill.thesmgroups.com";
-    const fullImageUrl = courseData.course_image_url && courseData.course_image_url.trim() !== ' '
+    let fullImageUrl = courseData.course_image_url && courseData.course_image_url.trim() !== ' '
       ? courseData.course_image_url
       : `${myServerBaseUrl}/default-course-image.jpg`;
+
+    if (fullImageUrl.startsWith('/')) {
+      fullImageUrl = `${myServerBaseUrl}${fullImageUrl}`;
+    }
 
     // STEP 3: Format the payload EXACTLY as TN LMS expects
     const tnPayload = {
